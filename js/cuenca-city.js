@@ -6,11 +6,11 @@ import {
   createCurtainWallMaterial,
   createFacadeBoxes,
   createParkLawnMaterial,
-  createPreWarBuildingMaterial,
-  createRoadSurfaceMaterial,
+    createRoadSurfaceMaterial,
   createSidewalkMaterial
 } from './tsl-materials.js';
 import { createTreeField, TREE_SPECIES } from './trees.js';
+import { createCuencaFacadeMaterial } from './cuenca-facade.js';
 
 // js/cuenca-city.js
 // Builds Cuenca from js/cuenca-geodata.js: the roadbed, the raised sidewalk islands (blocks), the buildings on their real
@@ -24,14 +24,6 @@ const hash = (a, b) => {
   return s - Math.floor(s);
 };
 
-// Cuenca's plaster palette: whitewash, ochre, terracotta, grey stone, with the stucco window style of the old town
-const WALL_STYLES = [
-  { stoneColor: 0xe9dfc8, trimColor: 0xa89a82, windowWidth: 2.2, floorHeight: STOREY, litProbability: 0.5, warmth: 0.9, seed: 11.3 },
-  { stoneColor: 0xd8b98c, trimColor: 0x8d7456, windowWidth: 2.2, floorHeight: STOREY, litProbability: 0.5, warmth: 0.9, seed: 23.7 },
-  { stoneColor: 0xc27a5a, trimColor: 0xd6c7ab, windowWidth: 2.4, floorHeight: STOREY, litProbability: 0.5, warmth: 0.88, seed: 35.1 },
-  { stoneColor: 0xb9b2a2, trimColor: 0x7d7667, windowWidth: 2.5, floorHeight: STOREY, litProbability: 0.55, warmth: 0.8, seed: 47.9 },
-  { stoneColor: 0xd9d2c0, trimColor: 0x948a76, windowWidth: 2.6, floorHeight: 3.5, litProbability: 0.55, warmth: 0.85, seed: 59.2 }
-];
 const STONE_MAT = new THREE.MeshStandardNodeMaterial({ color: 0xe4d9c0, metalness: 0.0, roughness: 0.85 });
 const DOME_MAT = new THREE.MeshStandardNodeMaterial({ color: 0x4ba3d6, metalness: 0.15, roughness: 0.3 });
 const DARK_MAT = new THREE.MeshStandardNodeMaterial({ color: 0x2a2622, metalness: 0.0, roughness: 0.6 });
@@ -396,7 +388,7 @@ function buildCuencaCity(scene) {
       const style = church ? 0 : glass ? 5 : Math.floor(hash(seed * 91.7, b.id) * 5) % 5;
       const c = Math.cos(ang), s = Math.sin(ang);
       const base = planeAt(b, px, pz) + (open ? 0.06 : SIDEWALK_Y);
-      if (!cathedral) boxes[style].push({ x: px, y: base + h / 2 - 0.05, z: pz, w, h: h + 0.05, d, ry: -ang, tone: seed, faces: [1, 1, 1, 1] });
+      if (!cathedral) boxes[style].push({ x: px, y: base + h / 2 - 0.05, z: pz, w, h: h + 0.05, d, ry: -ang, tone: church ? 0.02 : seed, faces: [1, 1, 1, 1] });
       const ex = Math.abs(c) * (w / 2) + Math.abs(s) * (d / 2);
       const ez = Math.abs(s) * (w / 2) + Math.abs(c) * (d / 2);
       colliders.push({ minX: px - ex, maxX: px + ex, minZ: pz - ez, maxZ: pz + ez, minY: base - 3, maxY: base + h, obb: { cx: px, cz: pz, hx: w / 2, hz: d / 2, cs: c, sn: -s } });
@@ -422,10 +414,8 @@ function buildCuencaCity(scene) {
     group.add(lawns);
   }
 
-  const materials = [
-    ...WALL_STYLES.map((o) => createPreWarBuildingMaterial({ ...o, boxLocal: true })),
-    createCurtainWallMaterial({ ...GLASS_STYLE, boxLocal: true })
-  ];
+  const facade = createCuencaFacadeMaterial();
+  const materials = [facade, facade, facade, facade, facade, createCurtainWallMaterial({ ...GLASS_STYLE, boxLocal: true })];
   boxes.forEach((items, i) => {
     if (!items.length) return;
     const mesh = createFacadeBoxes(materials[i], items);
