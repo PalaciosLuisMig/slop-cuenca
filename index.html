@@ -30,6 +30,7 @@
   <link rel="modulepreload" href="./js/cuenca-city.js" />
   <link rel="modulepreload" href="./js/cuenca-traffic.js" />
   <link rel="modulepreload" href="./js/cuenca-facade.js" />
+  <link rel="modulepreload" href="./js/cuenca-minimap.js" />
   <link rel="modulepreload" href="./js/controllers.js" />
   <link rel="modulepreload" href="./js/touch-controls.js" />
   <link rel="modulepreload" href="./js/gamepad-controls.js" />
@@ -154,6 +155,10 @@
   <!-- Bottom-Left: Street-Name Signs & Live GPS Radar Minimap -->
   <div class="hud hud-bottom-left">
     <div id="hud-location" class="location" aria-live="off"></div>
+    <aside id="minimap-card" class="panel radar" aria-label="Street radar of Cuenca">
+      <canvas id="minimap-canvas"></canvas>
+      <span class="radar-north" aria-hidden="true">N</span>
+    </aside>
   </div>
 
   <!-- Bottom-Center: Third-Person Mode Switcher & Controls Guide -->

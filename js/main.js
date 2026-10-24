@@ -6,6 +6,7 @@ import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
 import { getLocationLabel, isTypingInField, ROADS, CUENCA_LANDMARKS, TELEPORT_LOCATIONS, SPAWN, TERRAIN_BASE } from './city-config.js';
 import { buildCuencaCity } from './cuenca-city.js';
 import { createCuencaTraffic } from './cuenca-traffic.js';
+import { createMinimap } from './cuenca-minimap.js';
 import { ThirdPersonControllerManager } from './controllers.js';
 import { TouchControls } from './touch-controls.js';
 import { GamepadControls } from './gamepad-controls.js';
@@ -421,6 +422,7 @@ async function initApp() {
     return destination;
   }
 
+  const minimap = createMinimap(document.getElementById('minimap-canvas'), controllerManager);
   // The full-screen map has not been built for Cuenca yet
   const mapSystem = {
     isFullMapOpen: false,
@@ -637,6 +639,7 @@ async function initApp() {
     trafficSystem.update(dt, elapsed, cameraSystem.currentPos, controllerManager.getActiveEntity());
     lightingSystem.update(cameraSystem.currentPos);
     mapSystem.update();
+    minimap.update(now);
     audioSystem.update(dt, elapsed, cameraSystem.camera, lightingSystem.activePresetId === 'midnight');
 
     // Render frame via TSL RenderPipeline (SSR + Bloom)

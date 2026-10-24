@@ -250,8 +250,10 @@ const spot = (id) => {
 };
 const TELEPORT_LOCATIONS = {};
 {
-  const calderon = roadSpotNear(0, 20, 150);
-  TELEPORT_LOCATIONS.calderon = { x: calderon.x, z: calderon.z, heading: Math.atan2(-calderon.x, 26 - calderon.z) };
+  // On the street along the north side of the square, looking across it at the cathedral
+  const cathedral = CUENCA_LANDMARKS.find((l) => l.id === 'catedral') || { x: 0, z: 26 };
+  const calderon = roadSpotNear(cathedral.x + 60, cathedral.z - 95, 120);
+  TELEPORT_LOCATIONS.calderon = { x: calderon.x, z: calderon.z, heading: Math.atan2(cathedral.x - calderon.x, cathedral.z - calderon.z) };
   for (const id of ['catedral', 'sanfrancisco', 'mercado10', 'todossantos', 'bancocentral', 'terminal', 'universidad', 'turi']) {
     if (CUENCA_LANDMARKS.some((l) => l.id === id)) TELEPORT_LOCATIONS[id] = spot(id);
   }
