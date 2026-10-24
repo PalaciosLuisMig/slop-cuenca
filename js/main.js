@@ -5,6 +5,7 @@ import { createPostProcessing } from './post-processing.js';
 import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
 import { getLocationLabel, isTypingInField, ROADS, CUENCA_LANDMARKS, TELEPORT_LOCATIONS, SPAWN } from './city-config.js';
 import { buildCuencaCity } from './cuenca-city.js';
+import { createCuencaTraffic } from './cuenca-traffic.js';
 import { ThirdPersonControllerManager } from './controllers.js';
 import { TouchControls } from './touch-controls.js';
 import { GamepadControls } from './gamepad-controls.js';
@@ -70,8 +71,8 @@ async function initApp() {
   markInit('city');
   console.log('[city]', city.stats);
   const allColliders = city.colliders;
-  // Traffic, pedestrians' street life and signals are not built for Cuenca yet: the audio system only needs empty lists
-  const trafficSystem = { cars: [], buses: [], peds: [], update() {}, collide() {}, network: null };
+  const trafficSystem = createCuencaTraffic(scene);
+  markInit('traffic');
   const highwayTraffic = { cars: [], update() {} };
   const streetDetails = { audioSignals: [], signalClock: { value: 0 } };
 
@@ -633,6 +634,7 @@ async function initApp() {
       savePlayerState();
       nextPlayerSave = now + 5000;
     }
+    trafficSystem.update(dt, elapsed, cameraSystem.currentPos, controllerManager.getActiveEntity());
     lightingSystem.update(cameraSystem.currentPos);
     mapSystem.update();
     audioSystem.update(dt, elapsed, cameraSystem.camera, lightingSystem.activePresetId === 'midnight');
