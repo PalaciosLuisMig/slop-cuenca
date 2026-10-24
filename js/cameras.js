@@ -260,8 +260,11 @@ class CameraSystem {
         // Parque Calderón looking south across the square at the blue domes of the Catedral de la Inmaculada
         const c = lm('catedral');
         const sway = Math.sin(elapsed * 0.22) * 3.0;
-        desiredPos.set(c.x + 10.0 + sway, 16.0, c.z - 150.0);
-        desiredLook.set(c.x, 30.0, c.z + 4.0);
+        // from calle Benigno Malo, facing the façade at the east end of the footprint
+        const ca = Math.cos(c.ang || 0), sa = Math.sin(c.ang || 0);
+        const back = (c.w || 100) / 2 + 85.0;
+        desiredPos.set(c.x + ca * back - sa * (12.0 + sway), 14.0, c.z + sa * back + ca * (12.0 + sway));
+        desiredLook.set(c.x + ca * 20.0, 30.0, c.z + sa * 20.0);
         break;
       }
 

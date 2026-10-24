@@ -238,7 +238,7 @@ const LANDMARK_DEFS = [
 ];
 const CUENCA_LANDMARKS = LANDMARK_DEFS.filter(([, , , osm]) => LANDMARK_SITES[osm]).map(([id, name, short, osm, district]) => {
   const s = LANDMARK_SITES[osm];
-  return { id, name, short, district, x: s.x, z: s.z, w: s.w, d: s.d, h: s.h };
+  return { id, name, short, district, x: s.x, z: s.z, w: s.w, d: s.d, h: s.h, ang: s.ang || 0 };
 });
 
 // Street-level arrivals shared by every travel mode: the street next to each landmark
@@ -254,7 +254,13 @@ const TELEPORT_LOCATIONS = {};
   const cathedral = CUENCA_LANDMARKS.find((l) => l.id === 'catedral') || { x: 0, z: 26 };
   const calderon = roadSpotNear(cathedral.x + 60, cathedral.z - 95, 120);
   TELEPORT_LOCATIONS.calderon = { x: calderon.x, z: calderon.z, heading: Math.atan2(cathedral.x - calderon.x, cathedral.z - calderon.z) };
-  for (const id of ['catedral', 'sanfrancisco', 'mercado10', 'todossantos', 'bancocentral', 'terminal', 'universidad', 'turi']) {
+  // The cathedral's façade is the east end of its footprint, on calle Benigno Malo: arrive on that street, facing it
+  const cat = CUENCA_LANDMARKS.find((l) => l.id === 'catedral');
+  if (cat) {
+    const front = roadSpotNear(cat.x + (cat.w / 2 + 40) * Math.cos(cat.ang), cat.z + (cat.w / 2 + 40) * Math.sin(cat.ang), 60);
+    TELEPORT_LOCATIONS.catedral = { x: front.x, z: front.z, heading: Math.atan2(cat.x - front.x, cat.z - front.z) };
+  }
+  for (const id of ['sanfrancisco', 'mercado10', 'todossantos', 'bancocentral', 'terminal', 'universidad', 'turi']) {
     if (CUENCA_LANDMARKS.some((l) => l.id === id)) TELEPORT_LOCATIONS[id] = spot(id);
   }
 }

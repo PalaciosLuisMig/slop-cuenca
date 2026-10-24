@@ -41,9 +41,9 @@ function addCathedral(group, boxes, lot) {
   const c = Math.cos(ang), s = Math.sin(ang);
   // local (u along the long wall, v across it) -> world
   const at = (u, v) => [px + u * c - v * s, pz + u * s + v * c];
-  // the façade looks at Parque Calderón: north, towards -z
+  // the façade is the short end on calle Benigno Malo (+u in the footprint's frame, see LANDMARK_SITES)
   const towerU = w / 2 - 8.5;
-  const towerV = -(d / 2 - 7.5);
+  const towerV = d / 2 - 7.5;
   const mesh = (geo, mat, x, y, z) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
@@ -55,30 +55,31 @@ function addCathedral(group, boxes, lot) {
   };
   // nave
   mesh(new THREE.BoxGeometry(w, NAVE_H, d), STONE_MAT, px, SIDEWALK_Y + NAVE_H / 2, pz);
-  // towers on the park front, each with a stepped cap
+  // towers flanking the façade, each with a stepped cap
   for (const sign of [-1, 1]) {
-    const [x, z] = at(sign * towerU, towerV);
+    const tv = sign * towerV;
+    const [x, z] = at(towerU, tv);
     mesh(new THREE.BoxGeometry(14, 44, 14), STONE_MAT, x, SIDEWALK_Y + 22, z);
     mesh(new THREE.BoxGeometry(11, 2.4, 11), STONE_MAT, x, SIDEWALK_Y + 45.2, z);
     mesh(new THREE.BoxGeometry(6, 5, 6), DOME_MAT, x, SIDEWALK_Y + 48.9, z);
     // belfry openings on the four faces of the tower
     for (const [lu, lv] of [[0, -7.05], [0, 7.05], [-7.05, 0], [7.05, 0]]) {
-      const [wx, wz] = at(sign * towerU + lu, towerV + lv);
+      const [wx, wz] = at(towerU + lu, tv + lv);
       const o = mesh(new THREE.BoxGeometry(lu ? 0.2 : 2.6, 6, lu ? 2.6 : 0.2), DARK_MAT, wx, SIDEWALK_Y + 36, wz);
       o.castShadow = false;
     }
   }
-  // façade: three arched doors and a rose window facing the park, then tall arched windows along both flanks
-  for (const u of [-w * 0.12, 0, w * 0.12]) {
-    const [x, z] = at(u, -d / 2 - 0.08);
-    const door = mesh(new THREE.BoxGeometry(5.4, 9, 0.3), DARK_MAT, x, SIDEWALK_Y + 4.5, z);
+  // façade on calle Benigno Malo: three doors and a rose window between the towers, then tall windows along both flanks
+  for (const v of [-d * 0.17, 0, d * 0.17]) {
+    const [x, z] = at(w / 2 + 0.08, v);
+    const door = mesh(new THREE.BoxGeometry(0.3, 9, 5.4), DARK_MAT, x, SIDEWALK_Y + 4.5, z);
     door.castShadow = false;
   }
   {
-    const [x, z] = at(0, -d / 2 - 0.1);
+    const [x, z] = at(w / 2 + 0.1, 0);
     const rose = mesh(new THREE.CylinderGeometry(2.8, 2.8, 0.3, 24), DARK_MAT, x, SIDEWALK_Y + 17, z);
     rose.rotation.order = 'YXZ';
-    rose.rotation.set(Math.PI / 2, -ang, 0);
+    rose.rotation.set(0, -ang, Math.PI / 2);
     rose.castShadow = false;
   }
   for (const v of [-d / 2 - 0.08, d / 2 + 0.08]) {
