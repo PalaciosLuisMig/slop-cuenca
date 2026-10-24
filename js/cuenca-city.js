@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GEO } from './cuenca-geodata.js';
-import { BLOCKS, ISLAND_BOUNDS, ROADS } from './city-config.js';
+import { BLOCKS, ISLAND_BOUNDS, LANDMARK_SITES, ROADS } from './city-config.js';
 import {
   createCurtainWallMaterial,
   createFacadeBoxes,
@@ -32,7 +32,111 @@ const WALL_STYLES = [
   { stoneColor: 0xb9b2a2, trimColor: 0x7d7667, windowWidth: 2.5, floorHeight: STOREY, litProbability: 0.55, warmth: 0.8, seed: 47.9 },
   { stoneColor: 0xd9d2c0, trimColor: 0x948a76, windowWidth: 2.6, floorHeight: 3.5, litProbability: 0.55, warmth: 0.85, seed: 59.2 }
 ];
+const STONE_MAT = new THREE.MeshStandardNodeMaterial({ color: 0xe4d9c0, metalness: 0.0, roughness: 0.85 });
+const DOME_MAT = new THREE.MeshStandardNodeMaterial({ color: 0x4ba3d6, metalness: 0.15, roughness: 0.3 });
+const DARK_MAT = new THREE.MeshStandardNodeMaterial({ color: 0x2a2622, metalness: 0.0, roughness: 0.6 });
+const ROOF_MAT = new THREE.MeshStandardNodeMaterial({ color: 0x9c4a33, metalness: 0.0, roughness: 0.82 });
 const GLASS_STYLE = { glassTint: 0x1a3a52, frameTint: 0x3b4c5b, windowWidth: 2.7, floorHeight: 3.6, litProbability: 0.6, warmth: 0.55, reflectivity: 0.9, seed: 63.5 };
+
+
+// Catedral de la Inmaculada Concepción (the "new" cathedral): a stone body under a large sky-blue and white central dome,
+// two smaller domes and two unfinished towers on the park front. `lot` is the footprint box in world space.
+const CATHEDRAL_NAME = 'Catedral de la Inmaculada Concepción';
+const NAVE_H = 27;
+function addCathedral(group, boxes, lot) {
+  const { px, pz, w, d, ang } = lot;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  // local (u along the long wall, v across it) -> world
+  const at = (u, v) => [px + u * c - v * s, pz + u * s + v * c];
+  // the façade looks at Parque Calderón: north, towards -z
+  const towerU = w / 2 - 8.5;
+  const towerV = -(d / 2 - 7.5);
+  const mesh = (geo, mat, x, y, z) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.rotation.y = -ang;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    group.add(m);
+    return m;
+  };
+  // nave
+  mesh(new THREE.BoxGeometry(w, NAVE_H, d), STONE_MAT, px, SIDEWALK_Y + NAVE_H / 2, pz);
+  // towers on the park front, each with a stepped cap
+  for (const sign of [-1, 1]) {
+    const [x, z] = at(sign * towerU, towerV);
+    mesh(new THREE.BoxGeometry(14, 44, 14), STONE_MAT, x, SIDEWALK_Y + 22, z);
+    mesh(new THREE.BoxGeometry(11, 2.4, 11), STONE_MAT, x, SIDEWALK_Y + 45.2, z);
+    mesh(new THREE.BoxGeometry(6, 5, 6), DOME_MAT, x, SIDEWALK_Y + 48.9, z);
+    // belfry openings on the four faces of the tower
+    for (const [lu, lv] of [[0, -7.05], [0, 7.05], [-7.05, 0], [7.05, 0]]) {
+      const [wx, wz] = at(sign * towerU + lu, towerV + lv);
+      const o = mesh(new THREE.BoxGeometry(lu ? 0.2 : 2.6, 6, lu ? 2.6 : 0.2), DARK_MAT, wx, SIDEWALK_Y + 36, wz);
+      o.castShadow = false;
+    }
+  }
+  // façade: three arched doors and a rose window facing the park, then tall arched windows along both flanks
+  for (const u of [-w * 0.12, 0, w * 0.12]) {
+    const [x, z] = at(u, -d / 2 - 0.08);
+    const door = mesh(new THREE.BoxGeometry(5.4, 9, 0.3), DARK_MAT, x, SIDEWALK_Y + 4.5, z);
+    door.castShadow = false;
+  }
+  {
+    const [x, z] = at(0, -d / 2 - 0.1);
+    const rose = mesh(new THREE.CylinderGeometry(2.8, 2.8, 0.3, 24), DARK_MAT, x, SIDEWALK_Y + 17, z);
+    rose.rotation.order = 'YXZ';
+    rose.rotation.set(Math.PI / 2, -ang, 0);
+    rose.castShadow = false;
+  }
+  for (const v of [-d / 2 - 0.08, d / 2 + 0.08]) {
+    for (let u = -w / 2 + 18; u <= w / 2 - 18; u += 7) {
+      const [x, z] = at(u, v);
+      const win = mesh(new THREE.BoxGeometry(1.5, 8, 0.25), DARK_MAT, x, SIDEWALK_Y + 15, z);
+      win.castShadow = false;
+    }
+  }
+  const base = SIDEWALK_Y + NAVE_H;
+  const dome = (u, v, r, name) => {
+    const [x, z] = at(u, v);
+    const g = new THREE.Group();
+    g.name = name;
+    g.position.set(x, base, z);
+    const drumH = r * 0.7;
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.04, r * 1.12, drumH, 28), STONE_MAT);
+    drum.position.y = drumH / 2;
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(r, 36, 18, 0, Math.PI * 2, 0, Math.PI / 2), DOME_MAT);
+    shell.position.y = drumH;
+    shell.scale.y = 0.9;
+    const lantern = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.2, r * 0.24, r * 0.5, 12), STONE_MAT);
+    lantern.position.y = drumH + r * 0.9 + r * 0.25;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r * 0.24, r * 0.4, 12), DOME_MAT);
+    cone.position.y = drumH + r * 0.9 + r * 0.5 + r * 0.2;
+    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.28, r * 0.5, 0.28), STONE_MAT);
+    crossV.position.y = cone.position.y + r * 0.2 + r * 0.25;
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(r * 0.26, 0.28, 0.28), STONE_MAT);
+    crossH.position.y = crossV.position.y + r * 0.08;
+    g.add(drum, shell, lantern, cone, crossV, crossH);
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    group.add(g);
+  };
+  dome(0, 2, 11.5, 'CathedralDome'); // the large central dome: tip ~57 m
+  dome(-w * 0.27, 2, 6.2, 'CathedralDomeW');
+  dome(w * 0.27, 2, 6.2, 'CathedralDomeE');
+  // Gabled roof of the nave between the domes (tile red)
+  for (const [u0, u1] of [[-w / 2 + 14, -w * 0.27 - 8], [w * 0.27 + 8, w / 2 - 14]]) {
+    const len = u1 - u0;
+    if (len < 6) continue;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), ROOF_MAT);
+    roof.geometry.rotateY(Math.PI / 4);
+    roof.geometry.translate(0, 0.5, 0);
+    const [x, z] = at((u0 + u1) / 2, 2);
+    roof.position.set(x, base, z);
+    roof.scale.set(len, 5, d * 0.72);
+    roof.rotation.y = -ang;
+    roof.castShadow = true;
+    group.add(roof);
+  }
+}
 
 function stripGeometry(pts, width, y, extend = 0.15) {
   const pos = [];
@@ -76,6 +180,12 @@ function slabGeometry(poly, height) {
   const g = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 });
   g.rotateX(-Math.PI / 2);
   return g;
+}
+
+function pairs(flat) {
+  const out = [];
+  for (let i = 0; i < flat.length; i += 2) out.push({ x: flat[i], z: flat[i + 1] });
+  return out;
 }
 
 function pointInPoly(poly, x, z) {
@@ -156,7 +266,8 @@ function buildCuencaCity(scene) {
   const boxes = [[], [], [], [], [], []]; // one list per facade style (the last: glass)
   const roofs = [];
   const treeSites = [];
-  const rng = (i) => hash(i, i * 0.37 + 5.1);
+  const worship = Object.entries(LANDMARK_SITES).filter(([, l]) => l.worship && l.ring).map(([name, l]) => ({ name, poly: pairs(l.ring), cx: l.cx, cz: l.cz }));
+  const inWorship = (x, z) => worship.find((wp) => Math.abs(x - wp.cx) < 120 && Math.abs(z - wp.cz) < 120 && pointInPoly(wp.poly, x, z));
 
   for (const b of BLOCKS) {
     if (b.poly.length < 3) continue;
@@ -195,15 +306,19 @@ function buildCuencaCity(scene) {
       let h = mapHeight > 0 ? mapHeight : 6.6 + Math.floor(seed * 3) * STOREY;
       const storeys = Math.max(1, Math.round(h / STOREY));
       h = Math.max(3.2, storeys * STOREY);
-      const glass = h > 30 && seed > 0.35;
-      const style = glass ? 5 : Math.floor(hash(seed * 91.7, b.id) * 5) % 5;
+      const church = inWorship(px, pz);
+      const cathedral = church && church.name === CATHEDRAL_NAME;
+      if (cathedral) h = NAVE_H;
+      const glass = h > 30 && seed > 0.35 && !church;
+      const style = church ? 0 : glass ? 5 : Math.floor(hash(seed * 91.7, b.id) * 5) % 5;
       const c = Math.cos(ang), s = Math.sin(ang);
-      boxes[style].push({ x: px, y: SIDEWALK_Y + h / 2 - 0.05, z: pz, w, h: h + 0.05, d, ry: -ang, tone: seed, faces: [1, 1, 1, 1] });
+      if (!cathedral) boxes[style].push({ x: px, y: SIDEWALK_Y + h / 2 - 0.05, z: pz, w, h: h + 0.05, d, ry: -ang, tone: seed, faces: [1, 1, 1, 1] });
       const ex = Math.abs(c) * (w / 2) + Math.abs(s) * (d / 2);
       const ez = Math.abs(s) * (w / 2) + Math.abs(c) * (d / 2);
       colliders.push({ minX: px - ex, maxX: px + ex, minZ: pz - ez, maxZ: pz + ez, minY: 0, maxY: SIDEWALK_Y + h, obb: { cx: px, cz: pz, hx: w / 2, hz: d / 2, cs: c, sn: -s } });
+      if (cathedral) addCathedral(group, boxes, { px, pz, w, d, ang });
       // Clay-tile roof on low buildings
-      if (h < 16 && w < 34 && d < 34 && !glass) {
+      if (!cathedral && h < 16 && w < 34 && d < 34 && !glass) {
         roofs.push({ x: px, y: SIDEWALK_Y + h, z: pz, w: w * 1.06, d: d * 1.06, h: Math.min(w, d) * 0.22 + 0.9, ry: -ang });
       }
     });

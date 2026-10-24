@@ -448,9 +448,27 @@ for (const e of load('osm_landmarks.json')) {
   const area = Math.abs(ringArea(r));
   const prev = landmarks[t.name];
   if (prev && prev.area >= area) continue;
+  const rr = rdpRing(r.slice(0, -1), 0.4);
+  // Orientation: angle of the longest wall, folded into (-45°, 45°]; the footprint's size in that frame
+  let best = 0, ang = 0;
+  for (let i = 0, j = rr.length - 1; i < rr.length; j = i++) {
+    const L = Math.hypot(rr[i][0] - rr[j][0], rr[i][1] - rr[j][1]);
+    if (L > best) { best = L; ang = Math.atan2(rr[i][1] - rr[j][1], rr[i][0] - rr[j][0]); }
+  }
+  ang = ((ang % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);
+  if (ang > Math.PI / 4) ang -= Math.PI / 2;
+  const [mx, mz] = centroid(rr);
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (const [x, z] of rr) {
+    const u = (x - mx) * Math.cos(ang) + (z - mz) * Math.sin(ang);
+    const v = -(x - mx) * Math.sin(ang) + (z - mz) * Math.cos(ang);
+    u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v);
+  }
+  const worship = t.amenity === 'place_of_worship' || /iglesia|catedral|bas[ií]lica|sagrario|capilla|monasterio|santuario/i.test(t.name) ? 1 : 0;
   landmarks[t.name] = {
     x: r1((bb.x0 + bb.x1) / 2), z: r1((bb.z0 + bb.z1) / 2), w: r1(bb.x1 - bb.x0), d: r1(bb.z1 - bb.z0),
-    h: t.height ? parseFloat(t.height) : null, area: Math.round(area), ring: flat(rdpRing(r.slice(0, -1), 0.4))
+    h: t.height ? parseFloat(t.height) : null, area: Math.round(area), ring: flat(rr),
+    ang: Math.round(ang * 1e4) / 1e4, ow: r1(u1 - u0), od: r1(v1 - v0), cx: r1(mx + ((u0 + u1) / 2) * Math.cos(ang) - ((v0 + v1) / 2) * Math.sin(ang)), cz: r1(mz + ((u0 + u1) / 2) * Math.sin(ang) + ((v0 + v1) / 2) * Math.cos(ang)), worship
   };
 }
 log(`${Object.keys(landmarks).length} named footprints`);

@@ -260,8 +260,8 @@ class CameraSystem {
         // Parque Calderón looking south across the square at the blue domes of the Catedral de la Inmaculada
         const c = lm('catedral');
         const sway = Math.sin(elapsed * 0.22) * 3.0;
-        desiredPos.set(c.x + 8.0 + sway, 9.0, c.z - 70.0);
-        desiredLook.set(c.x, 34.0, c.z + 4.0);
+        desiredPos.set(c.x + 10.0 + sway, 16.0, c.z - 150.0);
+        desiredLook.set(c.x, 30.0, c.z + 4.0);
         break;
       }
 
