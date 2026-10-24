@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GEO } from './cuenca-geodata.js';
 import { PersonCrowd, PersonRig } from './pedestrians.js';
+import { groundHeightAt, terrainHeightAt } from './city-config.js';
 
 // js/cuenca-traffic.js
 // Ambient life for Cuenca on the street centreline graph (GEO.roadGraph): cars and buses that follow the streets on the
@@ -240,7 +241,7 @@ function createCuencaTraffic(scene) {
   const crowd = new PersonCrowd(PED_COUNT, { farDistance: 34, castShadow: true });
   for (const m of crowd.meshes) group.add(m);
   const peds = [];
-  const groundFn = () => SIDEWALK_Y;
+  const groundFn = (owner, x, z) => groundHeightAt(x, z, 'person');
   for (let i = 0; i < PED_COUNT; i++) {
     const female = rand() < 0.5;
     const rig = new PersonRig({ seed: Math.floor(rand() * 200), scale: 0.93 + rand() * 0.14, female, girth: 0.92 + rand() * 0.2, hair: rand(), armSwing: 0.8 + rand() * 0.4, stride: 0.9 + rand() * 0.2 });
@@ -333,7 +334,7 @@ function createCuencaTraffic(scene) {
     }
     for (const v of vehicles) {
       if (!v.active) continue;
-      dummy.position.set(v.x, 0.03, v.z);
+      dummy.position.set(v.x, terrainHeightAt(v.x, v.z) + 0.03, v.z);
       dummy.rotation.set(0, v.yaw, 0);
       dummy.updateMatrix();
       (v.bus ? busMesh : carMesh).setMatrixAt(v.index, dummy.matrix);

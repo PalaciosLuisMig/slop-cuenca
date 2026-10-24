@@ -4,7 +4,9 @@ import {
   getIslandBoundsAtZ,
   isTypingInField,
   blockAt,
-  SPAWN
+  SPAWN,
+  groundHeightAt,
+  terrainHeightAt
 } from './city-config.js';
 import { cityUniforms, createCarPaintMaterial, createContactShadowMaterial } from './tsl-materials.js';
 import {
@@ -327,7 +329,8 @@ class ThirdPersonControllerManager {
     this.resetInput();
     if (!Number.isFinite(heading)) heading = ent.heading;
     const heli = this.activeMode === 'helicopter';
-    const altitude = heli ? Math.max(0.25, Math.min(380, savedAltitude ?? Math.max(92, ent.position.y))) : 0;
+    const terrainY = terrainHeightAt(x, z);
+    const altitude = heli ? Math.max(terrainY + 0.25, Math.min(terrainY + 380, savedAltitude ?? Math.max(terrainY + 92, ent.position.y))) : 0;
     const destination = this.findTeleportPosition(x, z, heading, altitude);
     if (destination) {
       ent.position.x = destination.x;
@@ -830,10 +833,7 @@ class ThirdPersonControllerManager {
   }
 
   getGroundHeight(x, z, mode = 'person') {
-    if (mode === 'person') {
-      return this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0;
-    }
-    return 0.0;
+    return groundHeightAt(x, z, mode);
   }
 
   // The colliders whose bounds come within `r` of (x, z), in their original order. They never move, so they are
@@ -1209,10 +1209,11 @@ class ThirdPersonControllerManager {
     h.position.z += Math.cos(h.heading) * h.speed * dt;
     h.position.y += h.verticalSpeed * dt;
 
-    if (h.position.y < 0.25) {
-      this.reportCollision(h, groundCollider, 'ground', h.position.x, 0.25, h.position.z, 0, 1, 0, -h.verticalSpeed);
+    const terrainY = terrainHeightAt(h.position.x, h.position.z);
+    if (h.position.y < terrainY + 0.25) {
+      this.reportCollision(h, groundCollider, 'ground', h.position.x, terrainY + 0.25, h.position.z, 0, 1, 0, -h.verticalSpeed);
     }
-    h.position.y = Math.max(0.25, Math.min(380, h.position.y));
+    h.position.y = Math.max(terrainY + 0.25, Math.min(terrainY + 380, h.position.y));
     this.resolveHorizontalCollision(h.position, 4.5, null, h);
 
     const targetPitch = (h.speed / maxHorizSpeed) * 0.24;

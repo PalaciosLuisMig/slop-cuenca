@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GEO } from './cuenca-geodata.js';
-import { BLOCKS, ISLAND_BOUNDS, LANDMARK_SITES, ROADS } from './city-config.js';
+import { BLOCKS, LANDMARK_SITES, ROADS, TERRAIN, planeAt, terrainHeightAt } from './city-config.js';
 import {
   createCurtainWallMaterial,
   createFacadeBoxes,
@@ -45,6 +45,7 @@ const CATHEDRAL_NAME = 'Catedral de la Inmaculada Concepción';
 const NAVE_H = 27;
 function addCathedral(group, boxes, lot) {
   const { px, pz, w, d, ang } = lot;
+  const SIDEWALK_Y = lot.base; // top of the sidewalk under the building
   const c = Math.cos(ang), s = Math.sin(ang);
   // local (u along the long wall, v across it) -> world
   const at = (u, v) => [px + u * c - v * s, pz + u * s + v * c];
@@ -142,6 +143,7 @@ function addCathedral(group, boxes, lot) {
 // and a cross, and a small dome over the crossing on the larger churches
 function addChurch(group, boxes, lot, seed) {
   const { px, pz, w, d, ang, h } = lot;
+  const SIDEWALK_Y = lot.base;
   const c = Math.cos(ang), s = Math.sin(ang);
   const at = (u, v) => [px + u * c - v * s, pz + u * s + v * c];
   const long = w >= d; // the nave runs along the long side; the tower stands on one short end
@@ -171,7 +173,8 @@ function addChurch(group, boxes, lot, seed) {
   }
 }
 
-function stripGeometry(pts, width, y, extend = 0.15) {
+// A ribbon of `width` along a polyline, split into pieces of at most 20 m that each follow the terrain (+ lift)
+function stripGeometry(pts, width, lift, extend = 0.15) {
   const pos = [];
   const idx = [];
   const hw = width / 2;
@@ -182,10 +185,15 @@ function stripGeometry(pts, width, y, extend = 0.15) {
     if (L < 0.05) continue;
     const ux = (bx - ax) / L, uz = (bz - az) / L;
     const nx = -uz * hw, nz = ux * hw;
-    const x0 = ax - ux * extend, z0 = az - uz * extend, x1 = bx + ux * extend, z1 = bz + uz * extend;
-    const base = pos.length / 3;
-    pos.push(x0 + nx, y, z0 + nz, x0 - nx, y, z0 - nz, x1 + nx, y, z1 + nz, x1 - nx, y, z1 - nz);
-    idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
+    const n = Math.max(1, Math.ceil(L / 20));
+    for (let k = 0; k < n; k++) {
+      const t0 = (k / n) * L - (k === 0 ? extend : 0.05), t1 = ((k + 1) / n) * L + (k === n - 1 ? extend : 0.05);
+      const x0 = ax + ux * t0, z0 = az + uz * t0, x1 = ax + ux * t1, z1 = az + uz * t1;
+      const y0 = terrainHeightAt(x0, z0) + lift, y1 = terrainHeightAt(x1, z1) + lift;
+      const base = pos.length / 3;
+      pos.push(x0 + nx, y0, z0 + nz, x0 - nx, y0, z0 - nz, x1 + nx, y1, z1 + nz, x1 - nx, y1, z1 - nz);
+      idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
+    }
   }
   if (!pos.length) return null;
   const g = new THREE.BufferGeometry();
@@ -196,6 +204,7 @@ function stripGeometry(pts, width, y, extend = 0.15) {
 }
 
 function flatShape(flat, y) {
+  // a flat polygon at height y
   const shape = new THREE.Shape();
   for (let i = 0; i < flat.length; i += 2) {
     if (i === 0) shape.moveTo(flat[i], -flat[i + 1]);
@@ -207,11 +216,18 @@ function flatShape(flat, y) {
   return g;
 }
 
-function slabGeometry(poly, height) {
+// A sidewalk island: the polygon's footprint, its top on the block's plane (+ topLift) and its underside below the terrain
+function slabGeometry(block, topLift) {
   const shape = new THREE.Shape();
-  poly.forEach((p, i) => (i === 0 ? shape.moveTo(p.x, -p.z) : shape.lineTo(p.x, -p.z)));
-  const g = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 });
+  block.poly.forEach((p, i) => (i === 0 ? shape.moveTo(p.x, -p.z) : shape.lineTo(p.x, -p.z)));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false, curveSegments: 1 });
   g.rotateX(-Math.PI / 2);
+  const pos = g.attributes.position;
+  const bottom = block.plane.low - 1.5;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setY(i, pos.getY(i) > 0.5 ? planeAt(block, pos.getX(i), pos.getZ(i)) + topLift : bottom);
+  }
+  g.computeVertexNormals();
   return g;
 }
 
@@ -235,12 +251,41 @@ function buildCuencaCity(scene) {
   group.name = 'CuencaCity';
   const colliders = [];
 
-  // ---- Ground beyond the city & the roadbed ---------------------------------------------------------------------------
-  const far = new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000).rotateX(-Math.PI / 2), createParkLawnMaterial(true));
-  far.position.set((ISLAND_BOUNDS.minX + ISLAND_BOUNDS.maxX) / 2, -0.3, (ISLAND_BOUNDS.minZ + ISLAND_BOUNDS.maxZ) / 2);
-  far.receiveShadow = true;
-  far.name = 'CuencaGround';
-  group.add(far);
+  // ---- Terrain: the SRTM grid, padded out to the horizon with its edge heights, a little below the roads -------------------
+  {
+    const { x0, z0, step, nx, nz, h } = TERRAIN;
+    const FAR = 14000;
+    const xs = [x0 - FAR, ...Array.from({ length: nx }, (_, i) => x0 + i * step), x0 + (nx - 1) * step + FAR];
+    const zs = [z0 - FAR, ...Array.from({ length: nz }, (_, j) => z0 + j * step), z0 + (nz - 1) * step + FAR];
+    const W = nx + 2;
+    const pos = new Float32Array(W * (nz + 2) * 3);
+    for (let j = 0; j < nz + 2; j++) {
+      for (let i = 0; i < W; i++) {
+        const ci = Math.min(nx - 1, Math.max(0, i - 1)), cj = Math.min(nz - 1, Math.max(0, j - 1));
+        const k = (j * W + i) * 3;
+        pos[k] = xs[i];
+        pos[k + 1] = h[cj * nx + ci] - 0.35;
+        pos[k + 2] = zs[j];
+      }
+    }
+    const idx = [];
+    for (let j = 0; j < nz + 1; j++) {
+      for (let i = 0; i < W - 1; i++) {
+        const p00 = j * W + i, p10 = p00 + 1, p01 = p00 + W, p11 = p01 + 1;
+        // diagonal p01-p10, the one terrainHeightAt() interpolates over
+        idx.push(p00, p01, p10, p10, p01, p11);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const far = new THREE.Mesh(geo, createParkLawnMaterial(true));
+    far.receiveShadow = true;
+    far.frustumCulled = false;
+    far.name = 'CuencaTerrain';
+    group.add(far);
+  }
 
   // ---- Roads: asphalt ribbons ------------------------------------------------------------------------------------------
   const roadMat = createRoadSurfaceMaterial();
@@ -279,7 +324,12 @@ function buildCuencaCity(scene) {
     if (g) waterGeos.push(g);
   }
   for (const w of GEO.water) {
-    try { waterGeos.push(flatShape(w.ring, 0.012)); } catch { /* degenerate ring */ }
+    try {
+      let sx = 0, sz = 0;
+      for (let i = 0; i < w.ring.length; i += 2) { sx += w.ring[i]; sz += w.ring[i + 1]; }
+      const cnt = w.ring.length / 2;
+      waterGeos.push(flatShape(w.ring, terrainHeightAt(sx / cnt, sz / cnt) + 0.012));
+    } catch { /* degenerate ring */ }
   }
   if (waterGeos.length) {
     const water = new THREE.Mesh(mergeGeometries(waterGeos.map((g) => (g.index ? g.toNonIndexed() : g)).map((g) => {
@@ -307,13 +357,13 @@ function buildCuencaCity(scene) {
     // Parks and big open blocks (hills, farmland, the airport...) are lawn; the rest is raised sidewalk
     const lots = b.frames || [];
     const built = lots.reduce((a, f) => a + (f[3][0][1] - f[3][0][0]) * (f[3][0][3] - f[3][0][2]), 0);
-    const open = b.park > 0.5 || (b.area > 30000 && built / b.area < 0.12);
+    const open = b.park > 0.5 || (b.area > 8000 && built / b.area < 0.18);
     try {
       if (open) {
-        const g = slabGeometry(b.poly, 0.06);
+        const g = slabGeometry(b, 0.06);
         lawnGeos.push(g);
       } else {
-        slabGeos.push(slabGeometry(b.poly, SIDEWALK_Y));
+        slabGeos.push(slabGeometry(b, SIDEWALK_Y));
       }
     } catch { /* degenerate outline */ }
 
@@ -324,7 +374,7 @@ function buildCuencaCity(scene) {
         const x = b.minX + (b.maxX - b.minX) * hash(b.id + 1, i);
         const z = b.minZ + (b.maxZ - b.minZ) * hash(i + 3, b.id + 7);
         if (pointInPoly(b.poly, x, z)) {
-          treeSites.push({ x, y: 0.06, z, scale: 0.8 + 0.5 * hash(i, b.id), species: Math.floor(hash(b.id, i + 9) * TREE_SPECIES.length) % TREE_SPECIES.length });
+          treeSites.push({ x, y: planeAt(b, x, z) + 0.06, z, scale: 0.8 + 0.5 * hash(i, b.id), species: Math.floor(hash(b.id, i + 9) * TREE_SPECIES.length) % TREE_SPECIES.length });
         }
       }
       if (!b.frames) continue;
@@ -345,15 +395,16 @@ function buildCuencaCity(scene) {
       const glass = h > 30 && seed > 0.35 && !church;
       const style = church ? 0 : glass ? 5 : Math.floor(hash(seed * 91.7, b.id) * 5) % 5;
       const c = Math.cos(ang), s = Math.sin(ang);
-      if (!cathedral) boxes[style].push({ x: px, y: SIDEWALK_Y + h / 2 - 0.05, z: pz, w, h: h + 0.05, d, ry: -ang, tone: seed, faces: [1, 1, 1, 1] });
+      const base = planeAt(b, px, pz) + (open ? 0.06 : SIDEWALK_Y);
+      if (!cathedral) boxes[style].push({ x: px, y: base + h / 2 - 0.05, z: pz, w, h: h + 0.05, d, ry: -ang, tone: seed, faces: [1, 1, 1, 1] });
       const ex = Math.abs(c) * (w / 2) + Math.abs(s) * (d / 2);
       const ez = Math.abs(s) * (w / 2) + Math.abs(c) * (d / 2);
-      colliders.push({ minX: px - ex, maxX: px + ex, minZ: pz - ez, maxZ: pz + ez, minY: 0, maxY: SIDEWALK_Y + h, obb: { cx: px, cz: pz, hx: w / 2, hz: d / 2, cs: c, sn: -s } });
-      if (cathedral) addCathedral(group, boxes, { px, pz, w, d, ang });
-      else if (church && w * d > 250) addChurch(group, boxes, { px, pz, w, d, ang, h }, seed);
+      colliders.push({ minX: px - ex, maxX: px + ex, minZ: pz - ez, maxZ: pz + ez, minY: base - 3, maxY: base + h, obb: { cx: px, cz: pz, hx: w / 2, hz: d / 2, cs: c, sn: -s } });
+      if (cathedral) addCathedral(group, boxes, { px, pz, w, d, ang, base });
+      else if (church && w * d > 250) addChurch(group, boxes, { px, pz, w, d, ang, h, base }, seed);
       // Clay-tile roof on low buildings
       if (!cathedral && h < 16 && w < 34 && d < 34 && !glass) {
-        roofs.push({ x: px, y: SIDEWALK_Y + h, z: pz, w: w * 1.06, d: d * 1.06, h: Math.min(w, d) * 0.22 + 0.9, ry: -ang });
+        roofs.push({ x: px, y: base + h, z: pz, w: w * 1.06, d: d * 1.06, h: Math.min(w, d) * 0.22 + 0.9, ry: -ang });
       }
     });
   }
@@ -418,7 +469,7 @@ function buildCuencaCity(scene) {
         let x = p.x + (q.x - p.x) * f + nx * 1.3, z = p.z + (q.z - p.z) * f + nz * 1.3;
         if (!pointInPoly(b.poly, x, z)) { x -= nx * 2.6; z -= nz * 2.6; }
         if (!pointInPoly(b.poly, x, z)) continue;
-        treeSites.push({ x, y: SIDEWALK_Y, z, scale: 0.65 + 0.35 * hash(t, i), species: Math.floor(hash(i, t + b.id) * TREE_SPECIES.length) % TREE_SPECIES.length, tier: 1 });
+        treeSites.push({ x, y: planeAt(b, x, z) + SIDEWALK_Y, z, scale: 0.65 + 0.35 * hash(t, i), species: Math.floor(hash(i, t + b.id) * TREE_SPECIES.length) % TREE_SPECIES.length, tier: 1 });
       }
     }
   }

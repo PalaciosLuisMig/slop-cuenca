@@ -26,6 +26,25 @@ const CENTRAL_PARK_BOUNDS = { minX: 1e7, maxX: 1e7 + 1, minZ: 1e7, maxZ: 1e7 + 1
 const NJ_SHORELINE_POLYGON = [];
 const LONG_ISLAND_POLYGONS = [];
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Terrain: SRTM elevations on a 100 m grid (metres relative to Parque Calderón), interpolated over the very triangles the
+// terrain mesh is drawn with (cell diagonal from the (i, j+1) corner to the (i+1, j) corner), so roads follow it exactly
+// ---------------------------------------------------------------------------------------------------------------------
+const TERRAIN = GEO.terrain || { x0: -1, z0: -1, step: 1, nx: 2, nz: 2, baseElevation: 0, h: [0, 0, 0, 0] };
+const TERRAIN_BASE = TERRAIN.baseElevation;
+function terrainHeightAt(x, z) {
+  const { x0, z0, step, nx, nz, h } = TERRAIN;
+  let fx = (x - x0) / step;
+  let fz = (z - z0) / step;
+  fx = Math.max(0, Math.min(nx - 1.0001, fx));
+  fz = Math.max(0, Math.min(nz - 1.0001, fz));
+  const i = Math.floor(fx), j = Math.floor(fz);
+  const tx = fx - i, tz = fz - j;
+  const h00 = h[j * nx + i], h10 = h[j * nx + i + 1], h01 = h[(j + 1) * nx + i], h11 = h[(j + 1) * nx + i + 1];
+  return tx + tz <= 1 ? h00 + tx * (h10 - h00) + tz * (h01 - h00) : h11 + (1 - tx) * (h01 - h11) + (1 - tz) * (h10 - h11);
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Named roads & nearest-road lookup (labels)
 // ---------------------------------------------------------------------------------------------------------------------
@@ -103,6 +122,48 @@ const BLOCKS = GEO.blocks.map(([flat, rects, park, parkName, isRect, frames], id
     median: false
   };
 });
+
+// Each block's sidewalk is a plane through the terrain under it, lifted to clear the terrain everywhere:
+// y(x, z) = plane.c + plane.a * (x - plane.cx) + plane.b * (z - plane.cz)
+for (const b of BLOCKS) {
+  const pts = [];
+  const nx = Math.max(2, Math.min(7, Math.ceil((b.maxX - b.minX) / 25)));
+  const nz = Math.max(2, Math.min(7, Math.ceil((b.maxZ - b.minZ) / 25)));
+  for (let i = 0; i <= nx; i++) {
+    for (let j = 0; j <= nz; j++) {
+      const x = b.minX + ((b.maxX - b.minX) * i) / nx, z = b.minZ + ((b.maxZ - b.minZ) * j) / nz;
+      if (pointInPoly(b.poly, x, z)) pts.push([x, z, terrainHeightAt(x, z)]);
+    }
+  }
+  for (const p of b.poly.length > 40 ? b.poly.filter((_, k) => k % Math.ceil(b.poly.length / 40) === 0) : b.poly) pts.push([p.x, p.z, terrainHeightAt(p.x, p.z)]);
+  const cx = b.cx, cz = b.cz;
+  // least squares for h = c + a dx + b dz
+  let n = 0, sx = 0, sz = 0, sxx = 0, szz = 0, sxz = 0, sh = 0, sxh = 0, szh = 0;
+  for (const [x, z, h] of pts) {
+    const dx = x - cx, dz = z - cz;
+    n++; sx += dx; sz += dz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; sh += h; sxh += dx * h; szh += dz * h;
+  }
+  let pa = 0, pb = 0, pc = n ? sh / n : 0;
+  const det = n * (sxx * szz - sxz * sxz) - sx * (sx * szz - sxz * sz) + sz * (sx * sxz - sxx * sz);
+  if (n >= 3 && Math.abs(det) > 1e-6) {
+    // Cramer's rule on [n sx sz; sx sxx sxz; sz sxz szz] [c a b]' = [sh sxh szh]'
+    const d = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+    const M = [n, sx, sz, sx, sxx, sxz, sz, sxz, szz];
+    const D = d(M);
+    pc = d([sh, sx, sz, sxh, sxx, sxz, szh, sxz, szz]) / D;
+    pa = d([n, sh, sz, sx, sxh, sxz, sz, szh, szz]) / D;
+    pb = d([n, sx, sh, sx, sxx, sxh, sz, sxz, szh]) / D;
+  }
+  // lift to clear every sample, and keep the lowest terrain point for the slab's underside
+  let lift = -Infinity, low = Infinity;
+  for (const [x, z, h] of pts) {
+    lift = Math.max(lift, h - (pc + pa * (x - cx) + pb * (z - cz)));
+    low = Math.min(low, h);
+  }
+  b.plane = { a: pa, b: pb, c: pc + Math.max(0, lift), cx, cz, low: Number.isFinite(low) ? low : pc };
+}
+const planeAt = (b, x, z) => b.plane.c + b.plane.a * (x - b.plane.cx) + b.plane.b * (z - b.plane.cz);
+
 const BLOCK_CELL = 64;
 const BLOCK_GRID = new Map();
 for (const b of BLOCKS) {
@@ -132,6 +193,17 @@ function blockAt(x, z) {
   }
   return null;
 }
+
+/**
+ * Height of the walking / driving surface at (x, z): the sidewalk or lawn plane of the block there, else the road on
+ * the terrain. 'person' walks on the sidewalk; vehicles ride the road.
+ */
+function groundHeightAt(x, z, mode = 'person') {
+  const b = blockAt(x, z);
+  if (b) return planeAt(b, x, z) + (b.park > 0.5 ? 0.06 : 0.22);
+  return terrainHeightAt(x, z) + (mode === 'person' ? 0.03 : 0.03);
+}
+
 /** Blocks whose bounds overlap a rectangle */
 function blocksInRect(minX, maxX, minZ, maxZ) {
   const out = new Set();
@@ -238,10 +310,15 @@ export {
   SIGNAL_TIMING,
   SPAWN,
   TELEPORT_LOCATIONS,
+  TERRAIN,
+  TERRAIN_BASE,
   blockAt,
   blocksInRect,
   getIslandBoundsAtZ,
   getLocationLabel,
+  groundHeightAt,
+  planeAt,
+  terrainHeightAt,
   isTypingInField,
   nearestRoads,
   roadSpotNear,

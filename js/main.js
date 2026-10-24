@@ -3,7 +3,7 @@ import { pass, mrt, output, normalView, positionView, metalness, roughness, vec2
 import { ssr } from 'three/addons/tsl/display/SSRNode.js';
 import { createPostProcessing } from './post-processing.js';
 import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
-import { getLocationLabel, isTypingInField, ROADS, CUENCA_LANDMARKS, TELEPORT_LOCATIONS, SPAWN } from './city-config.js';
+import { getLocationLabel, isTypingInField, ROADS, CUENCA_LANDMARKS, TELEPORT_LOCATIONS, SPAWN, TERRAIN_BASE } from './city-config.js';
 import { buildCuencaCity } from './cuenca-city.js';
 import { createCuencaTraffic } from './cuenca-traffic.js';
 import { ThirdPersonControllerManager } from './controllers.js';
@@ -688,7 +688,7 @@ async function initApp() {
       const activeEnt = controllerManager.getActiveEntity();
       const mode = controllerManager.activeMode;
       const mph = Math.round(Math.abs(activeEnt.speed) * 2.237);
-      const altFt = Math.max(0, Math.round(activeEnt.position.y * 3.281));
+      const altFt = Math.max(0, Math.round((activeEnt.position.y + TERRAIN_BASE) * 3.281)); // above sea level
 
       if (elFps) {
         elFps.textContent = String(currentFps);

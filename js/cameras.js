@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { CUENCA_LANDMARKS, SPAWN } from './city-config.js';
+import { CUENCA_LANDMARKS, SPAWN, terrainHeightAt } from './city-config.js';
 
 // js/cameras.js
 // Multi-camera system supporting Third-Person Chase (with mouse/touch orbit + zoom),
@@ -326,6 +326,12 @@ class CameraSystem {
         desiredLook.set(0.0, 20.0, 60.0);
         break;
       }
+    }
+
+    // The scenic shots are framed over level ground: lift them with the terrain under camera and subject
+    if (this.getActivePreset().category === 'scenic') {
+      desiredPos.y += terrainHeightAt(desiredPos.x, desiredPos.z);
+      desiredLook.y += terrainHeightAt(desiredLook.x, desiredLook.z);
     }
 
     if (!this.initialized || this.activePresetId === 'pov') {

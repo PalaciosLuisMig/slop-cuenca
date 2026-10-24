@@ -474,13 +474,47 @@ for (const e of load('osm_landmarks.json')) {
 log(`${Object.keys(landmarks).length} named footprints`);
 
 // =====================================================================================================================
-// 7. ASSEMBLE
+// 7. TERRAIN: SRTM elevations (tools/fetch-cuenca-elevation.mjs), relative to the origin and lightly smoothed
+// =====================================================================================================================
+let terrain = null;
+if (fs.existsSync(path.join(DATA, 'elevation.json'))) {
+  const el = JSON.parse(fs.readFileSync(path.join(DATA, 'elevation.json'), 'utf8'));
+  let h = Float64Array.from(el.elev);
+  // SRTM is a surface model (roofs and tree canopy included): two passes of a 3x3 binomial filter
+  for (let pass = 0; pass < 2; pass++) {
+    const out = new Float64Array(h.length);
+    for (let j = 0; j < el.nz; j++) {
+      for (let i = 0; i < el.nx; i++) {
+        let sum = 0, wsum = 0;
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const ii = Math.min(el.nx - 1, Math.max(0, i + di)), jj = Math.min(el.nz - 1, Math.max(0, j + dj));
+          const wgt = (di ? 1 : 2) * (dj ? 1 : 2);
+          sum += h[jj * el.nx + ii] * wgt;
+          wsum += wgt;
+        }
+        out[j * el.nx + i] = sum / wsum;
+      }
+    }
+    h = out;
+  }
+  // height of the origin (bilinear)
+  const fx = (0 - el.x0) / el.step, fz = (0 - el.z0) / el.step;
+  const i0 = Math.floor(fx), j0 = Math.floor(fz), tx = fx - i0, tz = fz - j0;
+  const at = (i, j) => h[j * el.nx + i];
+  const base = at(i0, j0) * (1 - tx) * (1 - tz) + at(i0 + 1, j0) * tx * (1 - tz) + at(i0, j0 + 1) * (1 - tx) * tz + at(i0 + 1, j0 + 1) * tx * tz;
+  terrain = { x0: el.x0, z0: el.z0, step: el.step, nx: el.nx, nz: el.nz, baseElevation: Math.round(base), h: Array.from(h, (v) => r1(v - base)) };
+  log(`terrain ${el.nx} x ${el.nz}, origin at ${Math.round(base)} m, relief ${Math.min(...terrain.h)} .. ${Math.max(...terrain.h)} m`);
+}
+
+// =====================================================================================================================
+// 8. ASSEMBLE
 // =====================================================================================================================
 const GEO = {
   version: 1,
   frame: { bearingDeg: Math.round(((THETA * 180) / Math.PI) * 1000) / 1000, origin: 'Parque Calderón (Cuenca, Ecuador)', units: 'm', lat0: LAT0, lon0: LON0, bounds: { minX: r1(wb.x0), maxX: r1(wb.x1), minZ: r1(wb.z0), maxZ: r1(wb.z1) } },
   roads: roads.filter((r) => !/^(track|rest_area)$/.test(r.e.tags.highway)).map((r) => [r.name, r1(r.w), r.dir ? String(r.dir) : '', r.lanes, r.hw, flat(r.pts)]),
   roadGraph: { nodes: gNodes, links: gLinks, names: gNames },
+  terrain,
   rivers,
   water,
   blocks,
