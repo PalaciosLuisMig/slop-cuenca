@@ -138,6 +138,39 @@ function addCathedral(group, boxes, lot) {
   }
 }
 
+// A parish church: the lot's nave under its roof (added with the other roofs), a bell tower at the front with a tiled cap
+// and a cross, and a small dome over the crossing on the larger churches
+function addChurch(group, boxes, lot, seed) {
+  const { px, pz, w, d, ang, h } = lot;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const at = (u, v) => [px + u * c - v * s, pz + u * s + v * c];
+  const long = w >= d; // the nave runs along the long side; the tower stands on one short end
+  const towerW = Math.max(4.5, Math.min(7.5, Math.min(w, d) * 0.28));
+  const towerH = Math.max(h + 8, 20 + seed * 8);
+  const [x, z] = long ? at(-w / 2 + towerW / 2 + 0.5, 0) : at(0, -d / 2 + towerW / 2 + 0.5);
+  boxes[0].push({ x, y: SIDEWALK_Y + towerH / 2, z, w: towerW, h: towerH, d: towerW, ry: -ang, tone: 0.5, faces: [1, 1, 1, 1] });
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(towerW * 0.78, towerW * 0.9, 4), seed > 0.5 ? DOME_MAT : ROOF_MAT);
+  cap.rotation.y = -ang + Math.PI / 4;
+  cap.position.set(x, SIDEWALK_Y + towerH + towerW * 0.45, z);
+  cap.castShadow = true;
+  group.add(cap);
+  const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.2, 0.22), STONE_MAT);
+  crossV.position.set(x, SIDEWALK_Y + towerH + towerW * 0.9 + 1.1, z);
+  const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.22, 0.22), STONE_MAT);
+  crossH.position.set(x, crossV.position.y + 0.5, z);
+  crossH.rotation.y = -ang;
+  group.add(crossV, crossH);
+  if (Math.min(w, d) > 18) {
+    const r = Math.min(w, d) * 0.2;
+    const [dx, dz] = at(long ? w * 0.12 : 0, long ? 0 : d * 0.12);
+    const g = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), DOME_MAT);
+    g.position.set(dx, SIDEWALK_Y + h + 0.2, dz);
+    g.scale.y = 0.85;
+    g.castShadow = true;
+    group.add(g);
+  }
+}
+
 function stripGeometry(pts, width, y, extend = 0.15) {
   const pos = [];
   const idx = [];
@@ -317,6 +350,7 @@ function buildCuencaCity(scene) {
       const ez = Math.abs(s) * (w / 2) + Math.abs(c) * (d / 2);
       colliders.push({ minX: px - ex, maxX: px + ex, minZ: pz - ez, maxZ: pz + ez, minY: 0, maxY: SIDEWALK_Y + h, obb: { cx: px, cz: pz, hx: w / 2, hz: d / 2, cs: c, sn: -s } });
       if (cathedral) addCathedral(group, boxes, { px, pz, w, d, ang });
+      else if (church && w * d > 250) addChurch(group, boxes, { px, pz, w, d, ang, h }, seed);
       // Clay-tile roof on low buildings
       if (!cathedral && h < 16 && w < 34 && d < 34 && !glass) {
         roofs.push({ x: px, y: SIDEWALK_Y + h, z: pz, w: w * 1.06, d: d * 1.06, h: Math.min(w, d) * 0.22 + 0.9, ry: -ang });
