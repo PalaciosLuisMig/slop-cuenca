@@ -229,7 +229,7 @@
     </div>
   </section>
 
-  <!-- All Cameras: 3 Follow Cameras + 7 Iconic NYC Vantage Cameras + Auto-Director Drone -->
+  <!-- All Cameras: 3 follow cameras + 7 scenic cameras of Cuenca + the auto-director drone -->
   <div id="camera-popover" class="popover" popover data-side="above" data-anchor="hud-cluster" data-align="hud-cluster" aria-label="Multiple Camera Angles">
     <div class="pop-title">Follow</div>
     <button id="cam-chase" class="pop-item cam-btn active" data-camera="chase" type="button"><span class="pop-name">3rd-Person Chase</span><kbd>5</kbd></button>
@@ -245,64 +245,6 @@
     <button id="cam-rio" class="pop-item cam-btn" data-camera="rio" type="button"><span class="pop-name">Río Tomebamba</span></button>
     <button id="cam-drone" class="pop-item cam-btn" data-camera="drone" type="button"><span class="pop-name">Auto-Director Aerial</span></button>
   </div>
-
-  <!-- Full-Screen Interactive New York City Street Map ([M]) -->
-  <section id="fullmap-modal" class="fullmap-modal hidden" role="dialog" aria-modal="true" aria-label="Full New York City Interactive Street Map">
-    <div id="fullmap-canvas-wrap" class="fullmap-canvas-wrap">
-      <canvas id="fullmap-canvas"></canvas>
-    </div>
-
-    <div class="fullmap-header">
-      <div class="panel fullmap-title">
-        <span class="mta-bullet" aria-hidden="true">CU</span>
-        <div>
-          <h2>Manhattan Street Atlas</h2>
-          <p id="fullmap-player-info" class="fullmap-subtitle">You are at 5th Ave &amp; 35th St</p>
-        </div>
-      </div>
-      <label class="panel fullmap-search-wrap">
-        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-        <input id="fullmap-search" class="fullmap-search" type="text" placeholder="Search streets &amp; landmarks — Broadway, Canal, Wall St…" aria-label="Search street or landmark" autocomplete="off" spellcheck="false" />
-      </label>
-      <button id="close-fullmap-btn" class="panel tool-btn fullmap-close" type="button" title="Close map [M / Esc]">
-        <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg><span class="tool-label">Close</span><kbd>Esc</kbd>
-      </button>
-    </div>
-
-    <div class="map-controls">
-      <div class="panel map-compass" title="True north · Manhattan's street grid runs 29° east of it">
-        <svg viewBox="0 0 44 44" aria-hidden="true">
-          <g id="map-compass-needle">
-            <path d="M22 9.5 25.6 22h-7.2z" fill="#f05a4f"/>
-            <path d="M22 34.5 25.6 22h-7.2z" fill="rgba(255,255,255,0.72)"/>
-            <text x="22" y="8" text-anchor="middle">N</text>
-          </g>
-        </svg>
-      </div>
-      <div class="panel map-zoom">
-        <button id="map-zoom-in" class="icon-btn" type="button" title="Zoom in" aria-label="Zoom in"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
-        <button id="map-zoom-out" class="icon-btn" type="button" title="Zoom out" aria-label="Zoom out"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
-      </div>
-      <div class="panel map-zoom">
-        <button id="map-center-player" class="icon-btn" type="button" title="Street view around you" aria-label="Center on player"><svg class="icon" aria-hidden="true"><use href="#i-locate"/></svg></button>
-        <button id="map-view-all" class="icon-btn" type="button" title="All of Manhattan (125th St to Battery Park)" aria-label="Fit all of Manhattan"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg></button>
-      </div>
-    </div>
-
-    <div class="fullmap-footer">
-      <div class="panel fullmap-status">
-        <span id="fullmap-hover-info">Click anywhere to teleport &amp; set your GPS route · Drag to pan · Scroll to zoom</span>
-      </div>
-    </div>
-
-    <div class="panel fullmap-legend">
-      <span class="legend-item"><span class="legend-swatch player-swatch"></span>You</span>
-      <span class="legend-item"><span class="legend-swatch landmark-swatch"></span>Landmark</span>
-      <span class="legend-item"><span class="legend-swatch gps-swatch"></span>GPS route</span>
-      <span class="legend-item"><span class="legend-swatch bridge-swatch"></span>Bridge / Hwy</span>
-      <span id="fullmap-counts" class="legend-counts"></span>
-    </div>
-  </section>
 
 </body>
 </html>

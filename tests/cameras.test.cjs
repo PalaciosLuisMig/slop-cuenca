@@ -59,7 +59,10 @@ function cameraHarness(entity = {
   window.innerHeight = 900;
   const { CameraSystem } = loadModule(source, {
     globals: { window, document },
-    imports: { 'three/webgpu': { Vector3, PerspectiveCamera }, './landmarks.js': {} }
+    imports: {
+      'three/webgpu': { Vector3, PerspectiveCamera },
+      './city-config.js': { CUENCA_LANDMARKS: [], SPAWN: { x: 0, z: 0, heading: 0 }, terrainHeightAt: () => 0 }
+    }
   });
   const camera = new CameraSystem(canvas, { getActiveEntity: () => entity });
   return {

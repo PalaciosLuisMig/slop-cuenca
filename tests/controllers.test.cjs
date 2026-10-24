@@ -23,7 +23,10 @@ function keyboardHarness(nyc = {}) {
   const window = eventTarget();
   const document = { ...eventTarget(), hidden: false };
   const config = {
-    streetZ: () => 0,
+    SPAWN: { x: 0, z: 0, heading: 0 },
+    ISLAND_BOUNDS: { sidewalkHeight: 0.22 },
+    groundHeightAt: () => 0,
+    terrainHeightAt: () => 0,
     isTypingInField: (event) => ['INPUT', 'SELECT'].includes(event.target?.tagName),
     ...nyc
   };
@@ -35,8 +38,7 @@ function keyboardHarness(nyc = {}) {
       './tsl-materials.js': {},
       './actor-models.js': {},
       './pedestrians.js': {},
-      './vehicle-lights.js': {},
-      './landmarks.js': {}
+      './vehicle-lights.js': {}
     }
   });
   // Exercise the production event handlers without constructing the scene's 3D models.

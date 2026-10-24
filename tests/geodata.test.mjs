@@ -1,32 +1,42 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
-test('geodata builds with default paths in a checkout containing spaces and non-ASCII characters', { timeout: 180000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'New York 東京 '));
-  try {
-    fs.mkdirSync(path.join(dir, 'tools'));
-    fs.mkdirSync(path.join(dir, 'js'));
-    for (const name of fs.readdirSync(path.join(root, 'tools'))) {
-      if (name.endsWith('.mjs')) fs.copyFileSync(path.join(root, 'tools', name), path.join(dir, 'tools', name));
-    }
-    fs.symlinkSync(path.join(root, 'tools/data'), path.join(dir, 'tools/data'), 'dir');
-    const env = { ...process.env };
-    delete env.GEO_DATA;
-    const result = spawnSync(process.execPath, ['--max-old-space-size=8192', path.join(dir, 'tools/build-geodata.mjs')], {
-      encoding: 'utf8', env, timeout: 180000
-    });
-    assert.ifError(result.error);
-    assert.equal(result.status, 0, result.stderr + result.stdout);
-    const { GEO } = await import(pathToFileURL(path.join(dir, 'js/nyc-geodata.js')).href);
-    assert.ok(GEO.roadGraph.links.length > 0);
-    assert.ok(GEO.blocks.length > 0);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+const { GEO } = await import('../js/cuenca-geodata.js');
+
+test('the generated geodata has the layers the game reads', () => {
+  for (const key of ['frame', 'roads', 'roadGraph', 'terrain', 'rivers', 'water', 'blocks', 'parks', 'landmarks']) {
+    assert.ok(GEO[key], `${key} is present`);
   }
+  assert.ok(GEO.roads.length > 3000, 'the street network is dense');
+  assert.ok(GEO.blocks.length > 1000, 'the city is cut into blocks');
+  assert.ok(GEO.frame.bounds.maxX > GEO.frame.bounds.minX && GEO.frame.bounds.maxZ > GEO.frame.bounds.minZ);
+});
+
+test('every block is a closed outline whose lots lie near it', () => {
+  for (const [outline, rects, , , , frames] of GEO.blocks) {
+    assert.ok(outline.length >= 6 && outline.length % 2 === 0, 'an outline of at least three points');
+    assert.ok(Array.isArray(rects));
+    for (const [theta, px, pz, lots, height] of frames || []) {
+      assert.ok(Number.isFinite(theta) && Number.isFinite(px) && Number.isFinite(pz) && height >= 0);
+      assert.equal(lots.length, 1);
+      const [x0, x1, z0, z1] = lots[0];
+      assert.ok(x1 > x0 && z1 > z0 && px > x0 && px < x1 && pz > z0 && pz < z1, 'a lot is centred on its pivot');
+    }
+  }
+});
+
+test('the road graph links reference real nodes, and the terrain grid matches its size', () => {
+  const { nodes, links } = GEO.roadGraph;
+  for (const [a, b, name, , , dir] of links) {
+    assert.ok(a >= 0 && a < nodes.length / 2 && b >= 0 && b < nodes.length / 2);
+    assert.ok(Number.isInteger(name) && [-1, 0, 1].includes(dir));
+  }
+  const { nx, nz, h } = GEO.terrain;
+  assert.equal(h.length, nx * nz);
+});
+
+test('the cathedral and its square are in the data', () => {
+  const cathedral = GEO.landmarks['Catedral de la Inmaculada Concepción'];
+  assert.ok(cathedral && cathedral.h > 40 && cathedral.worship === 1);
+  assert.ok(Math.hypot(cathedral.x, cathedral.z) < 200, 'it stands next to the origin, Parque Calderón');
 });
