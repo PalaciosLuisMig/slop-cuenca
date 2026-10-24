@@ -9,8 +9,8 @@ A fork of [mrdoob/slop-newyork](https://github.com/mrdoob/slop-newyork): the eng
 - **The real street network, blocks and buildings**, from OpenStreetMap: about 6,400 streets, 1,900 blocks and 21,000 buildings, each on its real footprint and, where OpenStreetMap has it (76 %), at its real height.
 - **Relief** from SRTM elevations, so the valley, the Turi hill and the river banks rise and fall under the streets. The altitude gauge shows metres above sea level (about 2,550 m at Parque Calderón).
 - **The old town**: lime-washed facades in the town's palette, timber doors and balconies, clay-tile roofs, the Catedral de la Inmaculada Concepción with its blue domes, and parish churches with bell towers.
-- **The Tomebamba, Yanuncay and Tarqui rivers**, parks and street trees.
-- **Taxis, cars, buses and pedestrians** on the real street graph, a street radar, ten teleports and seven scenic cameras.
+- **The city's rivers** (the Tomebamba among them), parks and street trees.
+- **Taxis, cars, buses and pedestrians** on the real street graph, a street radar, nine teleports and seven scenic cameras.
 
 Not built yet: the full-screen map, traffic signals, the Tomebamba gorge (SRTM is too coarse for it) and the individual look of most churches and landmarks.
 
