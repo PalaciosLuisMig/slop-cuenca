@@ -87,9 +87,9 @@ function rdpRing(ring, eps) {
 }
 const geom = (e) => (e.geometry || []).map((g) => toWorld(g.lon, g.lat));
 // Outer rings of a way or multipolygon relation (several outer ways are chained into closed rings)
-function outerRings(e) {
-  if (e.type === 'way') return [geom(e)];
-  const parts = (e.members || []).filter((m) => m.role === 'outer' && m.geometry).map((m) => m.geometry.map((g) => toWorld(g.lon, g.lat)));
+function outerRings(e, role = 'outer') {
+  if (e.type === 'way') return role === 'outer' ? [geom(e)] : [];
+  const parts = (e.members || []).filter((m) => m.role === role && m.geometry).map((m) => m.geometry.map((g) => toWorld(g.lon, g.lat)));
   const rings = [];
   const close = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.5;
   while (parts.length) {
@@ -394,9 +394,38 @@ for (const e of osmBuildings) {
     }
     const lvl = parseFloat(t['building:levels']);
     const h = t.height ? parseFloat(t.height) : Number.isFinite(lvl) ? lvl * 3.2 : 0;
+    const hh = Number.isFinite(h) ? Math.round(h * 10) / 10 : 0;
     if (!lotsByComp.has(comp)) lotsByComp.set(comp, []);
-    lotsByComp.get(comp).push({ ang: Math.round(ang * 1e4) / 1e4, cx, cz, w: u1 - u0, d: v1 - v0, h: Number.isFinite(h) ? Math.round(h * 10) / 10 : 0 });
-    nLots++;
+    const lots = lotsByComp.get(comp);
+    const angR = Math.round(ang * 1e4) / 1e4;
+    // A lot from its extents in the building's frame (about the ring's centroid): centred on the rectangle itself
+    const push = (ua, ub, va, vb) => {
+      if (ub - ua < 2.5 || vb - va < 2.5) return;
+      const mu = (ua + ub) / 2, mv = (va + vb) / 2;
+      lots.push({ ang: angR, cx: cx + mu * c - mv * s, cz: cz + mu * s + mv * c, w: ub - ua, d: vb - va, h: hh });
+      nLots++;
+    };
+    // Courtyard buildings (multipolygons with an inner ring) become four wings around the patio
+    let patio = null;
+    if (e.type === 'relation' && (u1 - u0) * (v1 - v0) > 400) {
+      for (const inner of outerRings(e, 'inner')) {
+        if (!closedRing(inner) || Math.abs(ringArea(inner)) < 60) continue;
+        let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+        for (const [x, z] of inner) {
+          const u = (x - cx) * c + (z - cz) * s, v = -(x - cx) * s + (z - cz) * c;
+          a0 = Math.min(a0, u); a1 = Math.max(a1, u); b0 = Math.min(b0, v); b1 = Math.max(b1, v);
+        }
+        if (a0 > u0 && a1 < u1 && b0 > v0 && b1 < v1 && (!patio || (a1 - a0) * (b1 - b0) > (patio.u1 - patio.u0) * (patio.v1 - patio.v0))) patio = { u0: a0, u1: a1, v0: b0, v1: b1 };
+      }
+    }
+    if (patio) {
+      push(u0, u1, v0, patio.v0);
+      push(u0, u1, patio.v1, v1);
+      push(u0, patio.u0, patio.v0, patio.v1);
+      push(patio.u1, u1, patio.v0, patio.v1);
+    } else {
+      push(u0, u1, v0, v1);
+    }
   }
 }
 log(`${nLots} building lots`);
@@ -472,6 +501,19 @@ for (const e of load('osm_landmarks.json')) {
   };
 }
 log(`${Object.keys(landmarks).length} named footprints`);
+
+// The cathedral's mapped parts: its two bell towers and three blue domes
+if (fs.existsSync(path.join(DATA, 'osm_cathedral.json')) && landmarks['Catedral de la Inmaculada Concepción']) {
+  const parts = [];
+  for (const e of load('osm_cathedral.json')) {
+    const r = geom(e);
+    if (r.length < 3) continue;
+    const bb = bbox(r);
+    parts.push({ kind: e.tags['building:part'] ? 'dome' : 'tower', x: r1((bb.x0 + bb.x1) / 2), z: r1((bb.z0 + bb.z1) / 2), w: r1(bb.x1 - bb.x0), d: r1(bb.z1 - bb.z0), area: Math.round(Math.abs(ringArea(r))) });
+  }
+  landmarks['Catedral de la Inmaculada Concepción'].parts = parts;
+  log(`cathedral parts: ${parts.map((p) => `${p.kind} ${p.area} m2`).join(', ')}`);
+}
 
 // =====================================================================================================================
 // 7. TERRAIN: SRTM elevations (tools/fetch-cuenca-elevation.mjs), relative to the origin and lightly smoothed

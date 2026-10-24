@@ -7,4 +7,4 @@
   way["amenity"="place_of_worship"]["name"](-2.925,-79.035,-2.875,-78.980);
   way["bridge"]["name"](-2.925,-79.035,-2.875,-78.980);
 );
-out geom tags;
+out body geom;

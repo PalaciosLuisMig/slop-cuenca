@@ -262,9 +262,9 @@ class CameraSystem {
         const sway = Math.sin(elapsed * 0.22) * 3.0;
         // from calle Benigno Malo, facing the façade at the east end of the footprint
         const ca = Math.cos(c.ang || 0), sa = Math.sin(c.ang || 0);
-        const back = (c.w || 100) / 2 + 85.0;
-        desiredPos.set(c.x + ca * back - sa * (12.0 + sway), 14.0, c.z + sa * back + ca * (12.0 + sway));
-        desiredLook.set(c.x + ca * 20.0, 30.0, c.z + sa * 20.0);
+        const back = (c.w || 100) / 2 + 100.0;
+        desiredPos.set(c.x + ca * back - sa * (25.0 + sway), 36.0, c.z + sa * back + ca * (25.0 + sway));
+        desiredLook.set(c.x + ca * 10.0 + sa * 25.0, 20.0, c.z + sa * 10.0 - ca * 25.0);
         break;
       }
 

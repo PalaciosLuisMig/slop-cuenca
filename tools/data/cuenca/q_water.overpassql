@@ -6,4 +6,4 @@
   way["riverbank"](-2.925,-79.035,-2.875,-78.980);
   way["landuse"="reservoir"](-2.925,-79.035,-2.875,-78.980);
 );
-out geom tags;
+out body geom;

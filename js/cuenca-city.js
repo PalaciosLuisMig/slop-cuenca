@@ -34,7 +34,7 @@ const GLASS_STYLE = { glassTint: 0x1a3a52, frameTint: 0x3b4c5b, windowWidth: 2.7
 // Catedral de la Inmaculada Concepción (the "new" cathedral): a stone body under a large sky-blue and white central dome,
 // two smaller domes and two unfinished towers on the park front. `lot` is the footprint box in world space.
 const CATHEDRAL_NAME = 'Catedral de la Inmaculada Concepción';
-const NAVE_H = 27;
+const NAVE_H = 29;
 function addCathedral(group, boxes, lot) {
   const { px, pz, w, d, ang } = lot;
   const SIDEWALK_Y = lot.base; // top of the sidewalk under the building
@@ -42,8 +42,13 @@ function addCathedral(group, boxes, lot) {
   // local (u along the long wall, v across it) -> world
   const at = (u, v) => [px + u * c - v * s, pz + u * s + v * c];
   // the façade is the short end on calle Benigno Malo (+u in the footprint's frame, see LANDMARK_SITES)
-  const towerU = w / 2 - 8.5;
-  const towerV = d / 2 - 7.5;
+  // OpenStreetMap maps the two bell towers and the three domes: place them where they are (local frame of the footprint)
+  const mapped = (LANDMARK_SITES[CATHEDRAL_NAME] && LANDMARK_SITES[CATHEDRAL_NAME].parts) || [];
+  const local = (p) => [(p.x - px) * c + (p.z - pz) * s, -(p.x - px) * s + (p.z - pz) * c];
+  const towers = mapped.filter((p) => p.kind === 'tower').map((p) => ({ at: local(p), size: Math.min(15, Math.max(9, Math.min(p.w, p.d))) }));
+  const domes = mapped.filter((p) => p.kind === 'dome').map((p) => ({ at: local(p), r: Math.max(p.w, p.d) * 0.5 * 0.9 }));
+  if (towers.length < 2) towers.splice(0, towers.length, { at: [w / 2 - 8.5, -(d / 2 - 7.5)], size: 14 }, { at: [w / 2 - 8.5, d / 2 - 7.5], size: 14 });
+  if (!domes.length) domes.push({ at: [0, 2], r: 9 }, { at: [-w * 0.27, 2], r: 9 }, { at: [w * 0.27, 2], r: 9 });
   const mesh = (geo, mat, x, y, z) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
@@ -56,15 +61,15 @@ function addCathedral(group, boxes, lot) {
   // nave
   mesh(new THREE.BoxGeometry(w, NAVE_H, d), STONE_MAT, px, SIDEWALK_Y + NAVE_H / 2, pz);
   // towers flanking the façade, each with a stepped cap
-  for (const sign of [-1, 1]) {
-    const tv = sign * towerV;
-    const [x, z] = at(towerU, tv);
-    mesh(new THREE.BoxGeometry(14, 44, 14), STONE_MAT, x, SIDEWALK_Y + 22, z);
-    mesh(new THREE.BoxGeometry(11, 2.4, 11), STONE_MAT, x, SIDEWALK_Y + 45.2, z);
-    mesh(new THREE.BoxGeometry(6, 5, 6), DOME_MAT, x, SIDEWALK_Y + 48.9, z);
+  for (const { at: [tu, tv], size } of towers) {
+    const [x, z] = at(tu, tv);
+    mesh(new THREE.BoxGeometry(size, 44, size), STONE_MAT, x, SIDEWALK_Y + 22, z);
+    mesh(new THREE.BoxGeometry(size * 0.8, 2.4, size * 0.8), STONE_MAT, x, SIDEWALK_Y + 45.2, z);
+    mesh(new THREE.BoxGeometry(size * 0.45, 5, size * 0.45), DOME_MAT, x, SIDEWALK_Y + 48.9, z);
     // belfry openings on the four faces of the tower
-    for (const [lu, lv] of [[0, -7.05], [0, 7.05], [-7.05, 0], [7.05, 0]]) {
-      const [wx, wz] = at(towerU + lu, tv + lv);
+    const half = size / 2 + 0.05;
+    for (const [lu, lv] of [[0, -half], [0, half], [-half, 0], [half, 0]]) {
+      const [wx, wz] = at(tu + lu, tv + lv);
       const o = mesh(new THREE.BoxGeometry(lu ? 0.2 : 2.6, 6, lu ? 2.6 : 0.2), DARK_MAT, wx, SIDEWALK_Y + 36, wz);
       o.castShadow = false;
     }
@@ -113,23 +118,7 @@ function addCathedral(group, boxes, lot) {
     g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     group.add(g);
   };
-  dome(0, 2, 11.5, 'CathedralDome'); // the large central dome: tip ~57 m
-  dome(-w * 0.27, 2, 6.2, 'CathedralDomeW');
-  dome(w * 0.27, 2, 6.2, 'CathedralDomeE');
-  // Gabled roof of the nave between the domes (tile red)
-  for (const [u0, u1] of [[-w / 2 + 14, -w * 0.27 - 8], [w * 0.27 + 8, w / 2 - 14]]) {
-    const len = u1 - u0;
-    if (len < 6) continue;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), ROOF_MAT);
-    roof.geometry.rotateY(Math.PI / 4);
-    roof.geometry.translate(0, 0.5, 0);
-    const [x, z] = at((u0 + u1) / 2, 2);
-    roof.position.set(x, base, z);
-    roof.scale.set(len, 5, d * 0.72);
-    roof.rotation.y = -ang;
-    roof.castShadow = true;
-    group.add(roof);
-  }
+  for (const { at: [du, dv], r } of domes) dome(du, dv, r, 'CathedralDome');
 }
 
 // A parish church: the lot's nave under its roof (added with the other roofs), a bell tower at the front with a tiled cap
@@ -396,8 +385,14 @@ function buildCuencaCity(scene) {
       if (cathedral) addCathedral(group, boxes, { px, pz, w, d, ang, base });
       else if (church && w * d > 250) addChurch(group, boxes, { px, pz, w, d, ang, h, base }, seed);
       // Clay-tile roof on low buildings
-      if (!cathedral && h < 16 && w < 34 && d < 34 && !glass) {
-        roofs.push({ x: px, y: base + h, z: pz, w: w * 1.06, d: d * 1.06, h: Math.min(w, d) * 0.22 + 0.9, ry: -ang });
+      // (long narrow houses and wings get a gable along their length, squarer ones a hipped pyramid)
+      if (!cathedral && h < 16 && !glass) {
+        const short = Math.min(w, d), long = Math.max(w, d);
+        if (long / short > 1.9 && short < 22) {
+          roofs.push({ gable: true, x: px, y: base + h, z: pz, w: (w >= d ? w : d) * 1.02, d: short * 1.12, h: short * 0.22 + 0.9, ry: -ang + (w >= d ? 0 : Math.PI / 2) });
+        } else if (w < 34 && d < 34) {
+          roofs.push({ x: px, y: base + h, z: pz, w: w * 1.06, d: d * 1.06, h: short * 0.22 + 0.9, ry: -ang });
+        }
       }
     });
   }
@@ -427,22 +422,38 @@ function buildCuencaCity(scene) {
   });
 
   if (roofs.length) {
-    // Four-sided pyramid whose base is the unit square: scaled to each building's width, depth and ridge height
+    // Two roof shapes on the unit square, scaled to each building: a hipped pyramid, and a gable whose ridge runs along x
     const pyramid = new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1, false);
     pyramid.rotateY(Math.PI / 4);
     pyramid.translate(0, 0.5, 0);
+    const gable = (() => {
+      const v = (x, y, z) => [x, y, z];
+      const tris = [
+        v(-0.5, 0, -0.5), v(-0.5, 0, 0.5), v(-0.5, 1, 0), // west gable end
+        v(0.5, 0, 0.5), v(0.5, 0, -0.5), v(0.5, 1, 0), // east gable end
+        v(-0.5, 0, -0.5), v(-0.5, 1, 0), v(0.5, 1, 0), v(-0.5, 0, -0.5), v(0.5, 1, 0), v(0.5, 0, -0.5), // north slope
+        v(-0.5, 1, 0), v(-0.5, 0, 0.5), v(0.5, 0, 0.5), v(-0.5, 1, 0), v(0.5, 0, 0.5), v(0.5, 1, 0) // south slope
+      ];
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(), 3));
+      g.computeVertexNormals();
+      return g;
+    })();
     const roofMat = new THREE.MeshStandardNodeMaterial({ color: 0x9c4a33, metalness: 0.0, roughness: 0.82 });
-    const mesh = new THREE.InstancedMesh(pyramid, roofMat, roofs.length);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
-    roofs.forEach((r, i) => {
-      mesh.setMatrixAt(i, m.compose(new THREE.Vector3(r.x, r.y, r.z), q.setFromAxisAngle(up, r.ry), new THREE.Vector3(r.w, r.h, r.d)));
-    });
-    mesh.name = 'CuencaRoofs';
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+    for (const [geo, list, name] of [[pyramid, roofs.filter((r) => !r.gable), 'CuencaRoofs'], [gable, roofs.filter((r) => r.gable), 'CuencaGableRoofs']]) {
+      if (!list.length) continue;
+      const mesh = new THREE.InstancedMesh(geo, roofMat, list.length);
+      list.forEach((r, i) => {
+        mesh.setMatrixAt(i, m.compose(new THREE.Vector3(r.x, r.y, r.z), q.setFromAxisAngle(up, r.ry), new THREE.Vector3(r.w, r.h, r.d)));
+      });
+      mesh.name = name;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
   }
 
   // ---- Street trees along the sidewalk edges of the central blocks -----------------------------------------------------
