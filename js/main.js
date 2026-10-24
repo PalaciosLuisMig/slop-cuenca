@@ -3,25 +3,17 @@ import { pass, mrt, output, normalView, positionView, metalness, roughness, vec2
 import { ssr } from 'three/addons/tsl/display/SSRNode.js';
 import { createPostProcessing } from './post-processing.js';
 import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
-import { getLocationLabel, isTypingInField, ROADS, NYC_LANDMARKS, TELEPORT_LOCATIONS } from './city-config.js';
-import { buildCityGrid } from './city-grid.js';
-import { buildBoroughs } from './boroughs.js';
-import { buildLandmarks } from './landmarks.js';
-import { buildCityBlocks } from './buildings.js';
-import { buildStreetDetails } from './street-details.js';
-import { createTrafficSystem, createHighwayTraffic } from './traffic.js';
-import { buildRoadPaint } from './road-paint.js';
+import { getLocationLabel, isTypingInField, ROADS, CUENCA_LANDMARKS, TELEPORT_LOCATIONS, SPAWN } from './city-config.js';
+import { buildCuencaCity } from './cuenca-city.js';
 import { ThirdPersonControllerManager } from './controllers.js';
 import { TouchControls } from './touch-controls.js';
 import { GamepadControls } from './gamepad-controls.js';
 import { CameraSystem, CAMERA_PRESETS } from './cameras.js';
 import { LightingSystem } from './lighting.js';
-import { NYCMapSystem } from './nyc-map.js';
-import { setupSceneCulling, updateSceneCulling } from './scene-culling.js';
 import { CityAudioSystem } from './audio-system.js';
 
 // js/main.js
-// Main entry point for New York City (Midtown Manhattan) in Three.js WebGPURenderer & TSL (three.js dev, see index.html)
+// Main entry point for Cuenca, Ecuador in Three.js WebGPURenderer & TSL (three.js dev, see index.html)
 
 async function initApp() {
   const container = document.getElementById('canvas-container');
@@ -70,40 +62,30 @@ async function initApp() {
   markInit('lighting');
 
   if (loadingStatus) {
-    loadingStatus.textContent = 'Constructing Manhattan Grid, Landmarks & Streetscape...';
+    loadingStatus.textContent = 'Building Cuenca: streets, blocks, buildings & trees...';
   }
 
-  // 3. Build Manhattan Geography, Iconic Landmarks, Blocks, Street Details & Traffic
-  const cityGrid = buildCityGrid(scene);
-  markInit('cityGrid');
-  const boroughs = buildBoroughs(scene, { sidewalks: cityGrid.sidewalks });
-  markInit('boroughs');
-  const { colliders: landmarkColliders } = buildLandmarks(scene);
-  markInit('landmarks');
-  const cityBlocks = buildCityBlocks(scene);
-  markInit('blocks');
-  const allColliders = [...landmarkColliders, ...cityBlocks.colliders, ...boroughs.colliders, ...(cityGrid.colliders || [])];
-
-  const streetDetails = buildStreetDetails(scene);
-  markInit('streetDetails');
-  // Buildings turned along non-grid streets have oriented colliders whose world bounds reach past their lots: they stay
-  // inside the property line anyway, so the road network (lanes & sidewalks) doesn't need them.
-  // Elevated building sections that clear even a bus don't obstruct ground traffic.
-  const trafficSystem = createTrafficSystem(scene, cityGrid.sidewalks, [
-    ...cityGrid.footprints,
-    ...streetDetails.footprints,
-    ...allColliders.filter((c) => !c.obb && (c.minY ?? 0) < 3.5)
-  ]);
-  markInit('traffic');
-  const highwayTraffic = createHighwayTraffic(scene, cityGrid.highwayLanes);
-  buildRoadPaint(scene, trafficSystem.network);
-  markInit('roadPaint');
+  // 3. Build Cuenca from the OpenStreetMap geodata
+  const city = buildCuencaCity(scene);
+  markInit('city');
+  console.log('[city]', city.stats);
+  const allColliders = city.colliders;
+  // Traffic, pedestrians' street life and signals are not built for Cuenca yet: the audio system only needs empty lists
+  const trafficSystem = { cars: [], buses: [], peds: [], update() {}, collide() {}, network: null };
+  const highwayTraffic = { cars: [], update() {} };
+  const streetDetails = { audioSignals: [], signalClock: { value: 0 } };
 
   // 4. Initialize Third-Person Controllers (Person, Car, Cyclist, Helicopter) & Multi-Camera System
   const controllerManager = new ThirdPersonControllerManager(scene, allColliders);
+  // Every vehicle and the pedestrian start on the street next to Parque Calderón
+  for (const mode of Object.keys(controllerManager.entities)) {
+    controllerManager.setMode(mode);
+    controllerManager.teleportActiveTo(SPAWN.x, SPAWN.z, SPAWN.heading);
+  }
+  controllerManager.setMode('car');
   // Reuse teleport placement so saved players return at rest, close to their last positions.
   try {
-    const saved = JSON.parse(localStorage.getItem('nyc-player-state'));
+    const saved = JSON.parse(localStorage.getItem('cuenca-player-state'));
     if (saved?.version === 1) {
       for (const mode of Object.keys(controllerManager.entities)) {
         const p = saved.entities?.[mode];
@@ -120,7 +102,7 @@ async function initApp() {
       const entities = Object.fromEntries(Object.entries(controllerManager.entities).map(([mode, entity]) => [mode, {
         x: entity.position.x, y: entity.position.y, z: entity.position.z, heading: entity.heading
       }]));
-      localStorage.setItem('nyc-player-state', JSON.stringify({ version: 1, activeMode: controllerManager.activeMode, entities }));
+      localStorage.setItem('cuenca-player-state', JSON.stringify({ version: 1, activeMode: controllerManager.activeMode, entities }));
     } catch { /* Storage may be disabled or full. */ }
   }
 
@@ -147,14 +129,6 @@ async function initApp() {
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) savePlayerState(); });
   markInit('controllers');
-
-  // Island-wide static geometry: chunk & distance-cull the small props, shadow stand-ins for the big casters
-  // (scene-culling.js)
-  const cullingRoots = ['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'ManhattanLandmarks', 'Boroughs']
-    .map((name) => scene.getObjectByName(name))
-    .filter(Boolean);
-  setupSceneCulling(scene, cullingRoots, lightingSystem.sunLight.shadow);
-  markInit('culling');
 
   // On WebGPU, small InstancedMeshes (<= 1000 instances) keep their matrices in uniform buffers that three.js
   // re-uploads on every draw of every pass (~2.5 MB/frame with the shadow cascades, stalling the GPU queue).
@@ -389,7 +363,7 @@ async function initApp() {
 
   // Where you are: the place's name over its street corner, drawn as a pair of NYC street-name signs
   const roadNames = new Set(ROADS.map((r) => r.name));
-  const placeNames = new Set(NYC_LANDMARKS.map((l) => l.name));
+  const placeNames = new Set(CUENCA_LANDMARKS.map((l) => l.name));
   let locationText = '';
   function renderLocation(label) {
     if (!elLocation || label === locationText) return;
@@ -446,22 +420,15 @@ async function initApp() {
     return destination;
   }
 
-  const mapSystem = new NYCMapSystem({
-    controllerManager,
-    cameraSystem,
-    trafficSystem,
-    allBlocks: cityBlocks.allBlocks,
-    onToggle: (open) => {
-      controllerManager.resetInput();
-      touchControls.setEnabled(!open);
-      gamepadControls.setEnabled(!open);
-      const mapHint = document.getElementById('fullmap-hover-info');
-      if (open && touchControls.available && mapHint) {
-        mapHint.textContent = 'Tap to teleport · Drag to pan · Use + / − to zoom';
-      }
-    },
-    onTeleport: teleportTo
-  });
+  // The full-screen map has not been built for Cuenca yet
+  const mapSystem = {
+    isFullMapOpen: false,
+    waypoint: null,
+    toggleFullMap() {},
+    resizeFullCanvas() {},
+    renderFullMap() {},
+    update() {}
+  };
 
   teleportButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -514,13 +481,13 @@ async function initApp() {
         selectCamera('pov', true);
         break;
       case 'Digit8':
-        selectCamera('fifthAve', true);
+        selectCamera('calderon', true);
         break;
       case 'Digit9':
-        selectCamera('timesSquare', true);
+        selectCamera('sanFrancisco', true);
         break;
       case 'Digit0':
-        selectCamera('chryslerGCT', true);
+        selectCamera('todosSantos', true);
         break;
       case 'KeyV':
         cycleCamera(e.shiftKey ? -1 : 1);
@@ -662,28 +629,13 @@ async function initApp() {
     gamepadControls.update(dt);
     controllerManager.update(dt, elapsed);
     cameraSystem.update(dt, elapsed);
-    streetDetails.signalClock.value = elapsed;
-    trafficSystem.update(
-      dt,
-      elapsed,
-      cameraSystem.currentPos,
-      controllerManager.getActiveEntity(),
-      controllerManager.activeMode,
-      cameraSystem.camera
-    );
-    highwayTraffic.update(dt, cameraSystem.camera, controllerManager.getActiveEntity(), controllerManager.activeMode);
     if (!document.hidden && now >= nextPlayerSave) {
       savePlayerState();
       nextPlayerSave = now + 5000;
     }
-    if (boroughs.update) boroughs.update(elapsed); // Roosevelt Island Tramway cabins
-    cityBlocks.update(cameraSystem.currentPos.x, cameraSystem.currentPos.z);
-    if (cityBlocks.updateLights) cityBlocks.updateLights(cameraSystem.camera);
-    if (streetDetails.update) streetDetails.update(cameraSystem.camera);
     lightingSystem.update(cameraSystem.currentPos);
     mapSystem.update();
     audioSystem.update(dt, elapsed, cameraSystem.camera, lightingSystem.activePresetId === 'midnight');
-    if (warmedUp) updateSceneCulling(cameraSystem.camera.position); // the warm-up frame draws every chunk
 
     // Render frame via TSL RenderPipeline (SSR + Bloom)
     if (!warmedUp) {

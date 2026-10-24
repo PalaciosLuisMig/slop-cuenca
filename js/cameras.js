@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { bryantParkLawn } from './landmarks.js';
+import { CUENCA_LANDMARKS, SPAWN } from './city-config.js';
 
 // js/cameras.js
 // Multi-camera system supporting Third-Person Chase (with mouse/touch orbit + zoom),
@@ -9,15 +9,16 @@ const CAMERA_PRESETS = [
   { id: 'chase',       name: '3rd-Person Chase',         short: 'Chase',       category: 'follow', fov: 56 },
   { id: 'action',      name: 'Low-Angle Action',         short: 'Action',      category: 'follow', fov: 60 },
   { id: 'pov',         name: 'First-Person / Cockpit',   short: 'POV / Dash',  category: 'follow', fov: 68 },
-  { id: 'centralPark', name: 'Central Park Oasis',       short: 'Central Pk',  category: 'scenic', fov: 52 },
-  { id: 'fifthAve',    name: '5th Ave & Empire State',   short: '5th Ave',     category: 'scenic', fov: 48 },
-  { id: 'timesSquare', name: 'Times Square Crossroads',  short: 'Times Sq',    category: 'scenic', fov: 58 },
-  { id: 'chryslerGCT', name: '42nd St · Chrysler & GCT', short: 'Chrysler',    category: 'scenic', fov: 50 },
-  { id: 'observatory', name: 'Empire State 86th Deck',   short: '86th Deck',   category: 'scenic', fov: 52 },
-  { id: 'bryantPark',  name: 'Bryant Park & NYPL',       short: 'Bryant Pk',   category: 'scenic', fov: 52 },
-  { id: 'waterfront',  name: 'East River & Skyline',     short: 'Skyline',     category: 'scenic', fov: 46 },
+  { id: 'calderon',    name: 'Parque Calderón & Catedral', short: 'Calderón',  category: 'scenic', fov: 52 },
+  { id: 'sanFrancisco', name: 'Plaza San Francisco',     short: 'San Francisco', category: 'scenic', fov: 50 },
+  { id: 'todosSantos', name: 'Todos Santos & El Barranco', short: 'Todos Santos', category: 'scenic', fov: 56 },
+  { id: 'pumapungo',   name: 'Pumapungo',                short: 'Pumapungo',   category: 'scenic', fov: 52 },
+  { id: 'turi',        name: 'Mirador de Turi',          short: 'Turi',        category: 'scenic', fov: 46 },
+  { id: 'terminal',    name: 'Terminal Terrestre',       short: 'Terminal',    category: 'scenic', fov: 52 },
+  { id: 'rio',         name: 'Río Tomebamba',            short: 'Tomebamba',   category: 'scenic', fov: 50 },
   { id: 'drone',       name: 'Auto-Director Aerial',     short: 'Director',    category: 'scenic', fov: 50 }
 ];
+const lm = (id) => CUENCA_LANDMARKS.find((l) => l.id === id) || { x: SPAWN.x, z: SPAWN.z, w: 40, d: 40 };
 
 class CameraSystem {
   constructor(domElement, controllerManager) {
@@ -38,8 +39,8 @@ class CameraSystem {
     this.isDragging = false;
     this.userOrbitTimer = 0;
 
-    this.currentPos = new THREE.Vector3(0, 10, 380);
-    this.currentLookAt = new THREE.Vector3(0, 8, 440);
+    this.currentPos = new THREE.Vector3(0, 10, 60);
+    this.currentLookAt = new THREE.Vector3(0, 8, 120);
     this.initialized = false;
 
     // Follow cameras (chase / action) are smoothed relative to the followed entity, see update()
@@ -255,74 +256,74 @@ class CameraSystem {
         break;
       }
 
-      case 'centralPark': {
-        // Inside Central Park South looking across The Pond, Gapstow Bridge, The Mall, Sheep Meadow & UWS/UES Skylines
-        const sway = Math.sin(elapsed * 0.22) * 3.5;
-        desiredPos.set(-70.0 + sway, 14.0, -1425.0);
-        desiredLook.set(-250.0, 6.5, -1690.0);
+      case 'calderon': {
+        // Parque Calderón looking south across the square at the blue domes of the Catedral de la Inmaculada
+        const c = lm('catedral');
+        const sway = Math.sin(elapsed * 0.22) * 3.0;
+        desiredPos.set(c.x + 8.0 + sway, 9.0, c.z - 70.0);
+        desiredLook.set(c.x, 34.0, c.z + 4.0);
         break;
       }
 
-      case 'fifthAve': {
-        // 5th Avenue & 42nd St looking South down the 5th Ave canyon toward the Empire State Building
+      case 'sanFrancisco': {
+        // The market plaza of San Francisco
+        const c = lm('sanfrancisco');
         const sway = Math.sin(elapsed * 0.25) * 1.8;
-        desiredPos.set(0.0 + sway, 6.5, -20.0);
-        desiredLook.set(-60.0, 150.0, 686.0);
+        desiredPos.set(c.x + 36.0 + sway, 6.5, c.z - 34.0);
+        desiredLook.set(c.x, 12.0, c.z);
         break;
       }
 
-      case 'timesSquare': {
-        // Times Square & Broadway looking across Duffy Square red steps and One Times Square billboards
-        const sway = Math.sin(elapsed * 0.3) * 3.0;
-        desiredPos.set(-603.0 + sway, 5.5, -290.0);
-        desiredLook.set(-566.0, 40.0, -40.0);
-        break;
-      }
-
-      case 'chryslerGCT': {
-        // Park Ave & 42nd St intersection looking straight at Grand Central, MetLife, and Chrysler Building Crown
+      case 'todosSantos': {
+        // Todos Santos, above the cliff of El Barranco and the Tomebamba river
+        const c = lm('todossantos');
         const sway = Math.cos(elapsed * 0.22) * 2.5;
-        desiredPos.set(300.0 + sway, 9.5, 95.0);
-        desiredLook.set(470.0, 120.0, -50.0);
+        desiredPos.set(c.x - 50.0 + sway, 12.0, c.z + 48.0);
+        desiredLook.set(c.x + 16.0, 6.0, c.z);
         break;
       }
 
-      case 'observatory': {
-        // Empire State Building 86th Floor Deck looking North-East across Midtown skyline
-        const pan = Math.sin(elapsed * 0.18) * 80.0;
-        desiredPos.set(-58.0, 322.0, 660.0);
-        desiredLook.set(420.0 + pan, 150.0, -200.0);
-        break;
-      }
-
-      case 'bryantPark': {
-        // Inside Bryant Park Great Lawn looking East toward NYPL portico, One Vanderbilt & Chrysler Building
+      case 'pumapungo': {
+        // Banco Central / Pumapungo, on the old Inca site
+        const c = lm('bancocentral');
         const sway = Math.sin(elapsed * 0.25) * 1.5;
-        const lawn = bryantParkLawn || { minX: -260, maxX: -150, minZ: 40, maxZ: 120, top: 1.3 };
-        const lz = (lawn.minZ + lawn.maxZ) * 0.5;
-        desiredPos.set(lawn.minX + 18.0, lawn.top + 1.7, lz + sway);
-        desiredLook.set(lawn.maxX + 260.0, 70.0, lz - 60.0);
+        desiredPos.set(c.x - 70.0 + sway, 7.0, c.z + 30.0);
+        desiredLook.set(c.x, 14.0, c.z);
         break;
       }
 
-      case 'waterfront': {
-        // Over the shimmering East River looking across the FDR Drive, Queensboro Bridge & Midtown Skyline
+      case 'turi': {
+        // The overlook south of the city looking north over the whole valley
+        const c = lm('turi');
+        const pan = Math.sin(elapsed * 0.18) * 160.0;
+        desiredPos.set(c.x, 150.0, c.z - 40.0);
+        desiredLook.set(c.x + pan, 20.0, c.z - 1800.0);
+        break;
+      }
+
+      case 'terminal': {
+        const c = lm('terminal');
+        const sway = Math.sin(elapsed * 0.2) * 2.0;
+        desiredPos.set(c.x - 90.0 + sway, 8.0, c.z - 70.0);
+        desiredLook.set(c.x, 8.0, c.z);
+        break;
+      }
+
+      case 'rio': {
+        // Over the Tomebamba, looking along its colonial bank
+        const c = lm('todossantos');
         const drift = Math.sin(elapsed * 0.15) * 40.0;
-        desiredPos.set(1640.0, 60.0, 60.0 + drift);
-        desiredLook.set(150.0, 150.0, -150.0);
+        desiredPos.set(c.x - 160.0 + drift, 22.0, c.z + 40.0);
+        desiredLook.set(c.x + 100.0, 10.0, c.z);
         break;
       }
 
       case 'drone': {
         const angle = elapsed * 0.07 + 0.65;
-        const radius = 720.0 + Math.sin(elapsed * 0.23) * 140.0;
-        const alt = 330.0 + Math.cos(elapsed * 0.19) * 90.0;
-        desiredPos.set(
-          Math.cos(angle) * radius + 60.0,
-          alt,
-          Math.sin(angle) * radius + 250.0
-        );
-        desiredLook.set(60.0, 160.0, 250.0);
+        const radius = 620.0 + Math.sin(elapsed * 0.23) * 140.0;
+        const alt = 260.0 + Math.cos(elapsed * 0.19) * 80.0;
+        desiredPos.set(Math.cos(angle) * radius, alt, Math.sin(angle) * radius + 60.0);
+        desiredLook.set(0.0, 20.0, 60.0);
         break;
       }
     }

@@ -1,11 +1,10 @@
 import * as THREE from 'three/webgpu';
 import {
   ISLAND_BOUNDS,
-  CENTRAL_PARK_BOUNDS,
   getIslandBoundsAtZ,
   isTypingInField,
   blockAt,
-  streetZ
+  SPAWN
 } from './city-config.js';
 import { cityUniforms, createCarPaintMaterial, createContactShadowMaterial } from './tsl-materials.js';
 import {
@@ -21,7 +20,6 @@ import {
 } from './actor-models.js';
 import { PersonCrowd, PersonRig } from './pedestrians.js';
 import { HEADLIGHTS, createVehicleHeadlight, placeVehicleHeadlight } from './vehicle-lights.js';
-import { bryantParkLawn } from './landmarks.js';
 
 // js/controllers.js
 // Sculpted, non-blocky GTA 6-style 3D models, animations, and physics controllers
@@ -32,7 +30,7 @@ import { bryantParkLawn } from './landmarks.js';
 // 4. Helicopter (Manhattan Sightseeing Twin-Turbine Chopper)
 
 // Spawn on 5th Ave at 37th St, facing south down the avenue toward the Empire State Building (34th St)
-const SPAWN_Z = streetZ(37);
+const SPAWN_Z = SPAWN.z;
 const groundCollider = { type: 'ground' };
 
 const CAR_DRIVE = {
@@ -144,11 +142,11 @@ function createTaxiDoorDecalTexture() {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('T', 58, 66);
-  // NYC TAXI typography & Fare Rate
+  // TAXI CUENCA typography & Fare Rate
   ctx.fillStyle = '#111317';
   ctx.textAlign = 'left';
   ctx.font = '900 26px Inter, Arial, sans-serif';
-  ctx.fillText('NYC TAXI', 112, 42);
+  ctx.fillText('TAXI CUENCA', 112, 42);
   ctx.font = '700 15px JetBrains Mono, monospace';
   ctx.fillText('7Y48 · MEDALLION', 112, 68);
   ctx.font = '600 13px Inter, Arial, sans-serif';
@@ -175,7 +173,7 @@ function createNYLicensePlateTexture() {
   ctx.font = '900 48px JetBrains Mono, monospace';
   ctx.fillText('7Y48A', 128, 82);
   ctx.font = '700 13px Inter, Arial, sans-serif';
-  ctx.fillText('NYC T&LC', 128, 114);
+  ctx.fillText('CUENCA', 128, 114);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -454,7 +452,7 @@ class ThirdPersonControllerManager {
       mesh: root,
       crowd,
       rig,
-      position: new THREE.Vector3(-11.6, ISLAND_BOUNDS.sidewalkHeight, SPAWN_Z + 12),
+      position: new THREE.Vector3(SPAWN.x, ISLAND_BOUNDS.sidewalkHeight, SPAWN_Z),
       heading: 0,
       speed: 0,
       verticalVel: 0,
@@ -556,13 +554,13 @@ class ThirdPersonControllerManager {
 
     return {
       type: 'car',
-      label: 'NYC Yellow Taxi',
+      label: 'Taxi',
       mesh: root,
       chassisPivot,
       carState,
       headLights,
       wheels,
-      position: new THREE.Vector3(3.6, 0.0, SPAWN_Z + 12),
+      position: new THREE.Vector3(SPAWN.x, 0.0, SPAWN_Z),
       heading: 0,
       speed: 0,
       vx: 0,
@@ -717,7 +715,7 @@ class ThirdPersonControllerManager {
 
     return {
       type: 'cyclist',
-      label: 'NYC Bike Lane Cyclist',
+      label: 'Cyclist',
       mesh: root,
       leanPivot,
       frontWheel,
@@ -729,7 +727,7 @@ class ThirdPersonControllerManager {
       riderRig,
       helmet,
       headLight,
-      position: new THREE.Vector3(5.2, 0.0, SPAWN_Z - 8),
+      position: new THREE.Vector3(SPAWN.x, 0.0, SPAWN_Z),
       heading: 0,
       speed: 0,
       leanAngle: 0,
@@ -813,7 +811,7 @@ class ThirdPersonControllerManager {
       tiltPivot,
       mainRotorPivot,
       tailRotorPivot,
-      position: new THREE.Vector3(-110, 96, SPAWN_Z - 60),
+      position: new THREE.Vector3(SPAWN.x - 60, 96, SPAWN_Z - 60),
       heading: 0.62,
       speed: 0,
       verticalSpeed: 0,
@@ -832,16 +830,6 @@ class ThirdPersonControllerManager {
   }
 
   getGroundHeight(x, z, mode = 'person') {
-    // Inside Central Park (5th Ave to Central Park West, 59th St to 110th St)
-    const cp = CENTRAL_PARK_BOUNDS;
-    if (x > cp.minX && x < cp.maxX && z > cp.minZ && z < cp.maxZ) {
-      return 1.24;
-    }
-    // Inside Bryant Park's Great Lawn (west of the New York Public Library, 40th-42nd St)
-    const lawn = bryantParkLawn;
-    if (lawn && x > lawn.minX && x < lawn.maxX && z > lawn.minZ && z < lawn.maxZ) {
-      return lawn.top;
-    }
     if (mode === 'person') {
       return this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0;
     }
